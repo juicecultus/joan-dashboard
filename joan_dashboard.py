@@ -13,6 +13,7 @@ First-time setup:
 import argparse
 import calendar
 import io
+import math
 import os
 import sys
 import time
@@ -20,6 +21,16 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
+
+# --- Load .env file if present ---
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
 
 # --- Configuration (override via environment variables or .env file) ---
 VSS_HOST = os.environ.get("VSS_HOST", "192.168.6.6")
@@ -296,6 +307,27 @@ def fetch_tasks() -> list:
 
 
 # --- Rendering ---
+def draw_sun_icon(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 10, fill: int = 60):
+    """Draw a sun icon: filled circle with rays."""
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fill)
+    ray_len = r + 5
+    for angle in range(0, 360, 45):
+        rad = math.radians(angle)
+        x1 = cx + int((r + 2) * math.cos(rad))
+        y1 = cy + int((r + 2) * math.sin(rad))
+        x2 = cx + int(ray_len * math.cos(rad))
+        y2 = cy + int(ray_len * math.sin(rad))
+        draw.line([(x1, y1), (x2, y2)], fill=fill, width=2)
+
+
+def draw_moon_icon(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 10, fill: int = 60, bg: int = 255):
+    """Draw a crescent moon icon using two overlapping circles."""
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fill)
+    # Overlap a background-colored circle offset to the right to create crescent
+    offset = int(r * 0.6)
+    draw.ellipse([cx - r + offset, cy - r, cx + r + offset, cy + r], fill=bg)
+
+
 def draw_separator(draw: ImageDraw.Draw, y: int, margin: int = 100):
     draw.line([(margin, y), (WIDTH - margin, y)], fill=180, width=2)
 
@@ -394,8 +426,23 @@ def render_dashboard() -> Image.Image:
         draw.text((wx_cx, 155), f"Feels {weather['feels_like_c']}°", fill=80, font=get_font(26), anchor="mt")
         draw.text((wx_cx, 186), WEATHER_LOCATION, fill=100, font=get_font(22), anchor="mt")
 
-        # Sunrise / Sunset centered (plain text, no unicode icons)
-        draw.text((wx_cx, 218), f"Rise {weather['sunrise']}   Set {weather['sunset']}", fill=60, font=get_font(26), anchor="mt")
+        # Sunrise / Sunset with drawn icons
+        sun_set_y = 230
+        gap = 30
+        rise_text = weather['sunrise']
+        set_text = weather['sunset']
+        # Measure text widths to center the whole group
+        rise_font = get_font(26)
+        rise_w = rise_font.getlength(rise_text)
+        set_w = rise_font.getlength(set_text)
+        icon_w = 30  # icon diameter area
+        total_w = icon_w + rise_w + gap + icon_w + set_w
+        start_x = int(wx_cx - total_w // 2)
+        draw_sun_icon(draw, start_x + 12, sun_set_y, r=10, fill=60)
+        draw.text((start_x + icon_w, sun_set_y), rise_text, fill=60, font=rise_font, anchor="lm")
+        moon_x = int(start_x + icon_w + rise_w + gap)
+        draw_moon_icon(draw, moon_x + 12, sun_set_y, r=10, fill=60)
+        draw.text((moon_x + icon_w, sun_set_y), set_text, fill=60, font=rise_font, anchor="lm")
 
         # 3-day forecast: Today on its own row, then Fri + Sat side by side
         # Evenly spaced within remaining area (256 to HEADER_H)
