@@ -1,19 +1,34 @@
 # Joan Dashboard
 
-A custom dashboard for **Joan 13" e-ink displays** that shows weather, Google Calendar events, and Google Tasks — rendered as a PNG image and pushed via the [Visionect Software Suite (VSS)](https://docs.visionect.com/).
+A custom dashboard and **playlist rotation system** for **Joan 13" e-ink displays** — weather, calendar, tasks, art, quotes, and more, rendered as grayscale images and pushed via the [Visionect Software Suite (VSS)](https://docs.visionect.com/).
 
 ![Dashboard Preview](docs/preview.png)
 
 ## Features
 
-- **Clock** — large, always-current time display
-- **Month calendar** — compact mini calendar with today highlighted
-- **Weather** — current conditions, feels-like temperature, sunrise/sunset, and 3-day forecast via [Open-Meteo](https://open-meteo.com/) (free, no API key)
+### Main Dashboard
+- **Clock** — large time display
+- **Month calendar** — compact grid with today highlighted
+- **Weather** — current conditions, feels-like, sunrise/sunset icons, 3-day forecast via [Open-Meteo](https://open-meteo.com/) (free, no API key)
 - **Google Calendar** — today's schedule + full week ahead from all your calendars
 - **Google Tasks** — to-do list with checkboxes, dynamically fills available space
+- **Room temperature** — from the Joan's built-in LM75 sensor (via VSS API)
 - **Battery level** — live device battery percentage from VSS
-- **Auto-refresh** — configurable loop interval (default: 60 seconds)
-- **Preview mode** — render locally without pushing to the device
+
+### Playlist Screens (8 rotating screens)
+- **Daily Agenda** — large-font view of today's events, readable across the room
+- **Motivational Quote** — daily quote from [ZenQuotes](https://zenquotes.io/) API
+- **Countdown** — days until your next calendar events ("School breaks up — Tomorrow")
+- **Family Photo** — random photo from a local folder (e.g. SMB-mounted from another machine), new photo each rotation, auto-contrast enhanced for e-ink
+- **Word of the Day** — vocabulary builder with pronunciation, definition, and examples from [Free Dictionary API](https://dictionaryapi.dev/)
+- **This Day in History** — notable historical events from [Wikipedia](https://en.wikipedia.org/api/rest_v1/)
+- **Art Gallery** — random artwork from [The Metropolitan Museum of Art](https://metmuseum.github.io/) collection, displayed with title, artist, and medium
+- **Weather Radar** — live precipitation map from [RainViewer](https://www.rainviewer.com/api.html) overlaid on [OpenStreetMap](https://www.openstreetmap.org/) tiles
+
+### System
+- **Playlist rotation** — configurable screen order and interval
+- **Auto-refresh** — configurable loop interval (default: 60 seconds per screen)
+- **Preview mode** — render any screen locally without pushing to the device
 - **Runs on Raspberry Pi** — deploy as a systemd service alongside VSS for always-on operation
 
 ## How It Works
@@ -216,48 +231,87 @@ This opens a browser window. Log in with the Google account whose calendar and t
 ### 4. Preview
 
 ```bash
-python joan_dashboard.py --preview
+python joan_dashboard.py --preview                  # preview main dashboard
+python joan_dashboard.py --screen art --preview      # preview a specific screen
+python joan_dashboard.py --screen radar --preview    # preview weather radar
 ```
 
-This renders the dashboard and saves it as `joan_preview.png` without pushing to the device. Great for testing layout changes.
+Saves a PNG locally without pushing to the device. Great for testing.
 
-### 5. Push to Joan
+### 5. Push to Joan (single)
 
 ```bash
 python joan_dashboard.py
 ```
 
-Single render + push to the device.
-
-### 6. Auto-refresh
+### 6. Playlist rotation
 
 ```bash
+# Rotate all screens (60s each):
+python joan_dashboard.py --loop 60 --playlist dashboard,agenda,quote,countdown,photo,word,history,art,radar
+
+# Just the essentials:
+python joan_dashboard.py --loop 60 --playlist dashboard,quote,art
+
+# Dashboard only (original behaviour):
 python joan_dashboard.py --loop 60
 ```
 
-Renders and pushes every 60 seconds. The image on VSS is always fresh when the device next polls.
+Available screen names: `dashboard`, `agenda`, `quote`, `countdown`, `photo`, `word`, `history`, `art`, `radar`
 
 **Battery note:** The `--loop` interval controls how often your *server* pushes a new image. The Joan device's own poll interval (configured in VSS) determines battery drain. A 5-minute device poll interval gives ~4-6 months battery life on the 10,000mAh Joan 13".
 
+### 7. Family photos setup (optional)
+
+The `photo` screen reads images from a `photos/` folder (or wherever `PHOTOS_DIR` points). A new random photo is shown each rotation.
+
+```bash
+# Simple: copy photos directly
+cp ~/Pictures/*.jpg ~/joan-dashboard/photos/
+
+# Network: mount a shared folder via SMB
+sudo mkdir -p /mnt/joan_photos
+sudo mount -t cifs //mac-mini/joan_photos /mnt/joan_photos -o username=you,ro
+```
+
+Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are converted to grayscale, center-cropped to 1600×1200, and contrast-enhanced for e-ink.
+
 ## Layout
 
+### Main Dashboard
 ```
-┌──────────────┬─────────────────────┬──────────────────┐
-│              │  Thursday, 12 Feb   │       8°         │
-│    13:37     │  ┌──────────────┐   │   Light rain     │
-│              │  │ Month  Cal   │   │   Feels 6°       │
-│              │  │  grid  here  │   │  Rise/Set times  │
-│              │  └──────────────┘   │  3-day forecast  │
-├──────────────┴──────────┬──────────┴──────────────────┤
-│         To Do           │          Schedule           │
-│  □ Task 1               │  Today                     │
-│  □ Task 2               │    No events / event list  │
-│  □ Task 3               │  This Week                 │
-│  □ ...                  │    Fri 13 - Event...       │
-│  (fills remaining       │    Sat 14 - Event...       │
-│   space dynamically)    │    (tomorrow onwards)      │
-└─────────────────────────┴────────────────────────────┘
+┌──────────────┬───────────────────┬────────────────────┐
+│              │  February 2026    │       8°           │
+│    13:37     │  ┌─────────────┐  │   Light rain       │
+│              │  │ Mo Tu We .. │  │   Feels 6°         │
+│              │  │  compact    │  │  ☀ 07:23  ☽ 17:11  │
+│              │  │  calendar   │  │  3-day forecast    │
+│              │  └─────────────┘  │                    │
+├──────────────┴─────────┬─────────┴────────────────────┤
+│         To Do          │          Schedule            │
+│  □ Task 1              │  Today                       │
+│  □ Task 2              │    event list                │
+│  □ Task 3              │  This Week                   │
+│  □ ...                 │    Fri 13 - Event...         │
+│  (fills remaining      │    Sat 14 - Event...         │
+│   space dynamically)   │    (tomorrow onwards)        │
+├────────────────────────┴──────────────────────────────┤
+│ Waddesdon · Updated 17:44         Room 20°C · Batt 98%│
+└───────────────────────────────────────────────────────┘
 ```
+
+### Playlist Screens
+| Screen | Content | Data Source |
+|---|---|---|
+| `dashboard` | Main dashboard (above) | Google Calendar, Tasks, Open-Meteo, VSS |
+| `agenda` | Today's events in large font | Google Calendar |
+| `quote` | Daily motivational quote | ZenQuotes API |
+| `countdown` | Days until next events | Google Calendar |
+| `photo` | Random family photo (grayscale) | Local folder / SMB share |
+| `word` | Word of the day + definition | Free Dictionary API |
+| `history` | 4 events on this date in history | Wikipedia API |
+| `art` | Random artwork from the Met | Metropolitan Museum of Art API |
+| `radar` | Live precipitation radar map | RainViewer + OpenStreetMap |
 
 ## Running as a Service
 
@@ -325,10 +379,11 @@ Wants=network-online.target
 Type=simple
 User=youruser
 WorkingDirectory=/home/youruser/joan-dashboard
-ExecStart=/home/youruser/joan-dashboard/.venv/bin/python joan_dashboard.py --loop 60
+ExecStart=/home/youruser/joan-dashboard/.venv/bin/python joan_dashboard.py --loop 60 --playlist dashboard,agenda,quote,countdown,photo,word,history,art,radar
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
+Environment=PHOTOS_DIR=/mnt/joan_photos
 
 [Install]
 WantedBy=multi-user.target
@@ -441,7 +496,14 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 - **Python 3** + **Pillow** for image rendering
 - **Open-Meteo API** for weather (free, no key required)
 - **Google Calendar API v3** + **Google Tasks API v1** via OAuth2
-- **Visionect Software Suite** HTTP API for device communication
+- **Visionect Software Suite** HTTP API for device communication and sensor data
+- **ZenQuotes API** for daily motivational quotes
+- **Free Dictionary API** for word definitions
+- **Wikipedia REST API** for historical events
+- **Metropolitan Museum of Art API** for artwork
+- **RainViewer API** + **OpenStreetMap** for weather radar
+
+All APIs are free and require no API keys (except Google, which uses OAuth2).
 
 ## License
 
