@@ -350,8 +350,8 @@ def render_dashboard() -> Image.Image:
     # Header 3-column boundaries
     H_COL1_END = 440   # clock column
     H_COL2_L = 460     # date + calendar column
-    H_COL2_END = 1060
-    H_COL3_L = 1080    # weather column
+    H_COL2_END = 940
+    H_COL3_L = 960     # weather column
 
     def hline(y, x0=L, x1=R_END):
         draw.line([(x0, y), (x1, y)], fill=180, width=2)
