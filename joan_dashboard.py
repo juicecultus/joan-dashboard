@@ -373,7 +373,7 @@ def render_dashboard() -> Image.Image:
     col2_cx = (H_COL2_L + H_COL2_END) // 2
 
     # Date line at top
-    draw.text((col2_cx, 24), now.strftime("%A, %d %B %Y"), fill=40, font=get_font(30, bold=True), anchor="mt")
+    draw.text((col2_cx, 24), now.strftime("%B %Y"), fill=40, font=get_font(30, bold=True), anchor="mt")
 
     # Calendar grid centered in remaining space below date
     cal_obj = calendar.Calendar(firstweekday=0)
