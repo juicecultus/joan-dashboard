@@ -568,11 +568,36 @@ def render_dashboard() -> Image.Image:
 
     # ── Footer ──
     draw.text((WIDTH // 2, HEIGHT - 28), now.strftime("Updated %H:%M"), fill=160, font=get_font(26), anchor="mm")
+    battery = fetch_battery()
+    if battery:
+        batt_str = f"Batt {battery}%"
+        draw.text((R_END, HEIGHT - 28), batt_str, fill=160, font=get_font(26), anchor="rm")
 
     return img
 
 
 # --- VSS communication ---
+def fetch_battery() -> str | None:
+    """Fetch battery percentage from the VSS device API."""
+    if not DEVICE_UUID:
+        return None
+    try:
+        base_url = f"http://{VSS_HOST}:{VSS_PORT}"
+        s = get_session(base_url)
+        r = s.get(f"{base_url}/api/device/", timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list):
+                for d in data:
+                    if d.get("Uuid") == DEVICE_UUID:
+                        return d.get("Status", {}).get("Battery")
+            elif isinstance(data, dict):
+                return data.get("Status", {}).get("Battery")
+    except Exception as e:
+        print(f"[battery] Failed: {e}")
+    return None
+
+
 def get_session(base_url: str) -> requests.Session:
     """Create an authenticated session with VSS."""
     s = requests.Session()
