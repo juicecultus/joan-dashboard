@@ -728,6 +728,14 @@ def main():
                     sleep_mins = (24 * 60 - now_m) + wake_at
                 else:
                     sleep_mins = wake_at - now_m
+                # Push sleep screen before sleeping
+                try:
+                    from joan_screens import render_sleep_screen
+                    wake_str = f"{active_start // 60:02d}:{active_start % 60:02d}"
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Pushing sleep screen")
+                    push_image(render_sleep_screen(wake_time=wake_str))
+                except Exception as e:
+                    print(f"[sleep] Failed to render sleep screen: {e}")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
                 time.sleep(sleep_mins * 60)
                 continue
