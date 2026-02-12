@@ -550,7 +550,7 @@ def render_dashboard() -> Image.Image:
         day_date = monday + timedelta(days=i)
         date_key = day_date.strftime("%Y-%m-%d")
         events = week_events.get(date_key, [])
-        if not events or date_key == today_key:
+        if not events or date_key == today_key or day_date.date() < now.date():
             continue
         has_week_events = True
         day_label = day_date.strftime("%a %d")
