@@ -348,10 +348,10 @@ def render_dashboard() -> Image.Image:
     R_END = WIDTH - PAD
 
     # Header 3-column boundaries
-    H_COL1_END = 440   # clock column
-    H_COL2_L = 460     # date + calendar column
-    H_COL2_END = 940
-    H_COL3_L = 960     # weather column
+    H_COL1_END = 480   # clock column
+    H_COL2_L = 500     # date + calendar column
+    H_COL2_END = 980
+    H_COL3_L = 1000    # weather column
 
     def hline(y, x0=L, x1=R_END):
         draw.line([(x0, y), (x1, y)], fill=180, width=2)
@@ -424,10 +424,9 @@ def render_dashboard() -> Image.Image:
         draw.text((wx_cx, 26), f"{weather['temp_c']}°", fill=0, font=get_font(90, bold=True), anchor="mt")
         draw.text((wx_cx, 120), weather["desc"], fill=30, font=get_font(30, bold=True), anchor="mt")
         draw.text((wx_cx, 155), f"Feels {weather['feels_like_c']}°", fill=80, font=get_font(26), anchor="mt")
-        draw.text((wx_cx, 186), WEATHER_LOCATION, fill=100, font=get_font(22), anchor="mt")
 
         # Sunrise / Sunset with drawn icons
-        sun_set_y = 230
+        sun_set_y = 200
         gap = 30
         rise_text = weather['sunrise']
         set_text = weather['sunset']
@@ -567,7 +566,8 @@ def render_dashboard() -> Image.Image:
         draw.text((B_R + 12, ry), "No upcoming events", fill=120, font=get_font(26), anchor="lt")
 
     # ── Footer ──
-    draw.text((L, HEIGHT - 28), now.strftime("Updated %H:%M"), fill=160, font=get_font(26), anchor="lm")
+    footer_left = f"{WEATHER_LOCATION}  ·  Updated {now.strftime('%H:%M')}"
+    draw.text((L, HEIGHT - 28), footer_left, fill=160, font=get_font(26), anchor="lm")
     dev = fetch_device_status()
     footer_parts = []
     if dev["temperature"]:
