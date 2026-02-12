@@ -364,7 +364,7 @@ def render_dashboard() -> Image.Image:
     # ═══════════════════════════════════════════════
 
     # ── Col 1: Clock ──
-    clock_cx = (L + H_COL1_END) // 2
+    clock_cx = (L + H_COL1_END) // 2 + 20
     draw.text((clock_cx, HEADER_H // 2 - 10), now.strftime("%H:%M"), fill=0, font=get_font(140, bold=True), anchor="mm")
 
     vline(H_COL1_END + 10, PAD, HEADER_H - PAD)
@@ -383,9 +383,9 @@ def render_dashboard() -> Image.Image:
     cal_top = 62       # below date text
     cal_avail_w = H_COL2_END - H_COL2_L
     cal_avail_h = HEADER_H - cal_top - 10
-    cell_x = cal_avail_w // 7
+    cell_x = min(cal_avail_w // 7, 52)    # cap cell width for tighter grid
     grid_rows = 1 + num_weeks
-    cell_y = cal_avail_h // grid_rows
+    cell_y = min(cal_avail_h // grid_rows, 52)  # cap to match horizontal
     grid_w = 7 * cell_x
     grid_h = grid_rows * cell_y
 
@@ -568,34 +568,44 @@ def render_dashboard() -> Image.Image:
 
     # ── Footer ──
     draw.text((L, HEIGHT - 28), now.strftime("Updated %H:%M"), fill=160, font=get_font(26), anchor="lm")
-    battery = fetch_battery()
-    if battery:
-        batt_str = f"Batt {battery}%"
-        draw.text((R_END, HEIGHT - 28), batt_str, fill=160, font=get_font(26), anchor="rm")
+    dev = fetch_device_status()
+    footer_parts = []
+    if dev["temperature"]:
+        footer_parts.append(f"Room {dev['temperature']}°C")
+    if dev["battery"]:
+        footer_parts.append(f"Batt {dev['battery']}%")
+    if footer_parts:
+        draw.text((R_END, HEIGHT - 28), "  ·  ".join(footer_parts), fill=160, font=get_font(26), anchor="rm")
 
     return img
 
 
 # --- VSS communication ---
-def fetch_battery() -> str | None:
-    """Fetch battery percentage from the VSS device API."""
+def fetch_device_status() -> dict:
+    """Fetch battery and temperature from the VSS device API."""
+    result = {"battery": None, "temperature": None}
     if not DEVICE_UUID:
-        return None
+        return result
     try:
         base_url = f"http://{VSS_HOST}:{VSS_PORT}"
         s = get_session(base_url)
         r = s.get(f"{base_url}/api/device/", timeout=5)
         if r.status_code == 200:
             data = r.json()
+            status = None
             if isinstance(data, list):
                 for d in data:
                     if d.get("Uuid") == DEVICE_UUID:
-                        return d.get("Status", {}).get("Battery")
+                        status = d.get("Status", {})
+                        break
             elif isinstance(data, dict):
-                return data.get("Status", {}).get("Battery")
+                status = data.get("Status", {})
+            if status:
+                result["battery"] = status.get("Battery")
+                result["temperature"] = status.get("Temperature")
     except Exception as e:
-        print(f"[battery] Failed: {e}")
-    return None
+        print(f"[device_status] Failed: {e}")
+    return result
 
 
 def get_session(base_url: str) -> requests.Session:
