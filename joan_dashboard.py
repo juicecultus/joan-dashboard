@@ -435,7 +435,7 @@ def render_dashboard() -> Image.Image:
         rise_font = get_font(26)
         rise_w = rise_font.getlength(rise_text)
         set_w = rise_font.getlength(set_text)
-        icon_w = 30  # icon diameter area
+        icon_w = 38  # icon diameter area + spacing
         total_w = icon_w + rise_w + gap + icon_w + set_w
         start_x = int(wx_cx - total_w // 2)
         draw_sun_icon(draw, start_x + 12, sun_set_y, r=10, fill=60)
