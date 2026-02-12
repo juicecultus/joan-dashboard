@@ -32,8 +32,7 @@ Joan devices are thin clients. They don't run apps — instead, they periodicall
 | **Joan 13" device** | Any Joan / Visionect Place & Play e-ink display |
 | **Raspberry Pi** (or any Linux host) | To run VSS + this dashboard |
 | **Docker & Docker Compose** | For the Visionect Software Suite |
-| **Joan Configurator** | Desktop app to redirect the device (one-time, via USB) |
-| **Micro-USB cable** | To connect Joan to your computer for configuration |
+| **Micro-USB cable** | To connect Joan's FTDI serial console for server redirect (one-time) |
 | **Python 3.9+** | With pip |
 | **Google account** | For Calendar and Tasks integration |
 
@@ -96,21 +95,47 @@ Verify VSS is running by opening `http://<pi-ip>:8081` in a browser. You should 
 
 ### 3. Redirect the Joan device to your local VSS
 
-Out of the box, Joan devices connect to `getjoan.com`. You need to point your device at your local VSS server using the **Joan Configurator** desktop app and a Micro-USB cable.
+Out of the box, Joan devices connect to `getjoan.com`. You need to point your device at your local VSS server using the **serial console** over the Micro-USB port.
 
-1. **Download Joan Configurator** from [Visionect support](https://www.visionect.com/support/) (available for macOS, Windows, Linux)
-2. **Connect your Joan device** to your computer via the **Micro-USB** port (not USB-C — that's power only)
-3. Open Joan Configurator — it should detect your device
-4. Under **Server settings**, change:
-   - **Server address**: your Pi's IP (e.g. `192.168.1.100`)
-   - **Server port**: `11113`
-   - **Mode**: On-Premises
-5. Configure **WiFi** credentials if not already set
-6. Click **Save** and **Reboot** the device
+The Joan's Micro-USB port exposes an **FTDI USB UART** (not USB-C — that's power only). Connect it to your computer and you get a serial CLI at 115200 baud.
+
+#### Option A: Use the included redirect script
+
+A ready-made script is included in this repo. Edit the IP and port at the top, then run:
+
+```bash
+pip install pyserial
+# Edit LOCAL_IP and PORT in joan_redirect_and_reboot.py first
+python joan_redirect_and_reboot.py
+```
+
+This will:
+1. Read the current server settings
+2. Set the server to your local VSS IP + port 11113
+3. Save to flash
+4. Reboot the device
+
+#### Option B: Manual serial commands
+
+Connect to the serial port with any terminal (e.g. `screen`, `minicom`, or `picocom`):
+
+```bash
+# macOS example — your device path may differ
+screen /dev/cu.usbserial-* 115200
+```
+
+Then type these commands:
+
+```
+server_tcp_get                           # show current server (e.g. we3.gw.getjoan.com 11113)
+server_tcp_set 192.168.1.100 11113       # replace with your Pi's IP
+flash_save                               # persist to flash
+reboot                                   # reboot to connect to new server
+```
+
+> **Finding your serial port:** On macOS, look for `/dev/cu.usbserial-*`. On Linux, it's typically `/dev/ttyUSB0`. The FTDI chip will appear as soon as you plug in the Micro-USB cable.
 
 The device will now connect to your local VSS instead of the Joan cloud.
-
-> **Tip:** You can verify the server address was changed by checking the Configurator's readback, or via the serial console if you have one connected.
 
 ### 4. Verify the device appears in VSS
 
