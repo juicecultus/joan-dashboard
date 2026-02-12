@@ -1006,22 +1006,24 @@ def render_todo_list() -> Image.Image:
     box_size = 28
 
     for task in tasks[:14]:  # max 14 tasks for screen space
-        # Checkbox
-        box_top = y + (row_h - box_size) // 2
+        mid_y = y + row_h // 2
+
+        # Checkbox — vertically centered on mid_y
+        box_top = mid_y - box_size // 2
         draw.rectangle(
             [PAD + 20, box_top, PAD + 20 + box_size, box_top + box_size],
             outline=80, width=2,
         )
 
-        # Task title
+        # Task title — anchored to same mid_y
         title = task["title"]
         if len(title) > 55:
             title = title[:52] + "..."
-        draw.text((PAD + 70, y + row_h // 2), title, fill=20, font=get_font(32), anchor="lm")
+        draw.text((PAD + 70, mid_y), title, fill=20, font=get_font(32), anchor="lm")
 
         # Due date (right side)
         if task["due"]:
-            draw.text((WIDTH - PAD - 20, y + row_h // 2), task["due"], fill=140, font=get_font(24), anchor="rm")
+            draw.text((WIDTH - PAD - 20, mid_y), task["due"], fill=140, font=get_font(24), anchor="rm")
 
         y += row_h
         if y > HEIGHT - 80:
