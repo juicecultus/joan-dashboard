@@ -567,7 +567,7 @@ def render_dashboard() -> Image.Image:
         draw.text((B_R + 12, ry), "No upcoming events", fill=120, font=get_font(26), anchor="lt")
 
     # ── Footer ──
-    draw.text((WIDTH // 2, HEIGHT - 28), now.strftime("Updated %H:%M"), fill=160, font=get_font(26), anchor="mm")
+    draw.text((L, HEIGHT - 28), now.strftime("Updated %H:%M"), fill=160, font=get_font(26), anchor="lm")
     battery = fetch_battery()
     if battery:
         batt_str = f"Batt {battery}%"
