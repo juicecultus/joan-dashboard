@@ -4,7 +4,7 @@
 Prerequisites:
   1. Go to https://console.cloud.google.com/
   2. Create a project (or select existing)
-  3. Enable "Google Calendar API" and "Google Tasks API"
+  3. Enable "Google Calendar API", "Google Tasks API", and "Photos Library API"
   4. Go to Credentials -> Create Credentials -> OAuth client ID
   5. Application type: Desktop app
   6. Download the JSON and save as credentials.json in this directory
@@ -26,6 +26,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/tasks.readonly",
+    "https://www.googleapis.com/auth/photoslibrary.readonly",
 ]
 
 CREDS_FILE = os.path.join(os.path.dirname(__file__), "credentials.json")
@@ -39,7 +40,7 @@ def main():
         print("To create it:")
         print("  1. Go to https://console.cloud.google.com/")
         print("  2. Create/select a project")
-        print("  3. Enable 'Google Calendar API' and 'Google Tasks API'")
+        print("  3. Enable 'Google Calendar API', 'Google Tasks API', and 'Photos Library API'")
         print("  4. Go to APIs & Services -> Credentials")
         print("  5. Create Credentials -> OAuth client ID -> Desktop app")
         print("  6. Download JSON -> save as credentials.json here")
@@ -65,7 +66,7 @@ def main():
     else:
         print(f"Token already valid: {TOKEN_FILE}")
 
-    print("Done! The dashboard can now access Calendar and Tasks.")
+    print("Done! The dashboard can now access Calendar, Tasks, and Photos.")
 
 
 if __name__ == "__main__":

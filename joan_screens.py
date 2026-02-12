@@ -9,6 +9,7 @@ import json
 import os
 import random
 import textwrap
+import time
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -204,55 +205,59 @@ def render_countdown() -> Image.Image:
 PHOTOS_DIR = os.environ.get("PHOTOS_DIR", os.path.join(os.path.dirname(__file__), "photos"))
 
 
+def _load_and_process_photo(photo: Image.Image) -> Image.Image:
+    """Convert photo to 1600x1200 grayscale, center-cropped, contrast-enhanced."""
+    photo = photo.convert("L")
+
+    # Resize to fill, maintaining aspect ratio, then center-crop
+    pw, ph = photo.size
+    scale = max(WIDTH / pw, HEIGHT / ph)
+    new_w = int(pw * scale)
+    new_h = int(ph * scale)
+    photo = photo.resize((new_w, new_h), Image.LANCZOS)
+
+    # Center crop
+    left = (new_w - WIDTH) // 2
+    top = (new_h - HEIGHT) // 2
+    photo = photo.crop((left, top, left + WIDTH, top + HEIGHT))
+
+    # Enhance contrast for e-ink (stretch histogram)
+    from PIL import ImageOps
+    photo = ImageOps.autocontrast(photo, cutoff=1)
+    return photo
+
+
 def render_family_photo() -> Image.Image:
-    """Display a random photo from the photos/ directory in grayscale."""
+    """Display a random photo from photos/ folder — new photo each rotation.
+
+    Populate the folder by syncing from Google Photos using:
+        rclone sync google-photos:media/by-month/2024 ~/joan-dashboard/photos/
+    Or simply copy/scp your favourite photos into the folder.
+    """
     img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
 
     if not os.path.isdir(PHOTOS_DIR):
-        draw = ImageDraw.Draw(img)
-        draw.text((WIDTH // 2, HEIGHT // 2 - 30), "No photos/ folder found", fill=80, font=get_font(40), anchor="mm")
-        draw.text((WIDTH // 2, HEIGHT // 2 + 30), f"Create: {PHOTOS_DIR}", fill=120, font=get_font(26), anchor="mm")
-        return img
+        os.makedirs(PHOTOS_DIR, exist_ok=True)
 
     exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
     photos = [f for f in os.listdir(PHOTOS_DIR) if os.path.splitext(f)[1].lower() in exts]
 
     if not photos:
-        draw = ImageDraw.Draw(img)
-        draw.text((WIDTH // 2, HEIGHT // 2), "No photos in photos/ folder", fill=80, font=get_font(40), anchor="mm")
+        draw.text((WIDTH // 2, HEIGHT // 2 - 40), "Family Photos", fill=0, font=get_font(50, bold=True), anchor="mm")
+        draw.text((WIDTH // 2, HEIGHT // 2 + 20), "Add photos to the photos/ folder", fill=120, font=get_font(30), anchor="mm")
+        draw.text((WIDTH // 2, HEIGHT // 2 + 60), PHOTOS_DIR, fill=160, font=get_font(22), anchor="mm")
         return img
 
-    # Pick a "random" photo based on the day (same photo all day, changes daily)
-    day_seed = int(datetime.now().strftime("%Y%m%d"))
-    random.seed(day_seed)
-    photo_file = random.choice(sorted(photos))
-    random.seed()  # reset
+    # Pick a truly random photo (new each rotation)
+    photo_file = random.choice(photos)
 
     try:
         photo = Image.open(os.path.join(PHOTOS_DIR, photo_file))
-        photo = photo.convert("L")  # grayscale
-
-        # Resize to fill, maintaining aspect ratio, then center-crop
-        pw, ph = photo.size
-        scale = max(WIDTH / pw, HEIGHT / ph)
-        new_w = int(pw * scale)
-        new_h = int(ph * scale)
-        photo = photo.resize((new_w, new_h), Image.LANCZOS)
-
-        # Center crop
-        left = (new_w - WIDTH) // 2
-        top = (new_h - HEIGHT) // 2
-        photo = photo.crop((left, top, left + WIDTH, top + HEIGHT))
-
-        # Enhance contrast for e-ink (stretch histogram)
-        from PIL import ImageOps
-        photo = ImageOps.autocontrast(photo, cutoff=1)
-
-        return photo
+        return _load_and_process_photo(photo)
     except Exception as e:
         print(f"[photo] Failed to load {photo_file}: {e}")
-        draw = ImageDraw.Draw(img)
-        draw.text((WIDTH // 2, HEIGHT // 2), f"Error loading photo", fill=80, font=get_font(40), anchor="mm")
+        draw.text((WIDTH // 2, HEIGHT // 2), "Error loading photo", fill=80, font=get_font(40), anchor="mm")
         return img
 
 

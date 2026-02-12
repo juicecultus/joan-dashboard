@@ -192,6 +192,7 @@ def get_google_creds():
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, [
             "https://www.googleapis.com/auth/calendar.readonly",
             "https://www.googleapis.com/auth/tasks.readonly",
+            "https://www.googleapis.com/auth/photoslibrary.readonly",
         ])
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
