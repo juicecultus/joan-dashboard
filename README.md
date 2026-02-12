@@ -11,8 +11,10 @@ A custom dashboard for **Joan 13" e-ink displays** that shows weather, Google Ca
 - **Weather** — current conditions, feels-like temperature, sunrise/sunset, and 3-day forecast via [Open-Meteo](https://open-meteo.com/) (free, no API key)
 - **Google Calendar** — today's schedule + full week ahead from all your calendars
 - **Google Tasks** — to-do list with checkboxes, dynamically fills available space
+- **Battery level** — live device battery percentage from VSS
 - **Auto-refresh** — configurable loop interval (default: 60 seconds)
 - **Preview mode** — render locally without pushing to the device
+- **Runs on Raspberry Pi** — deploy as a systemd service alongside VSS for always-on operation
 
 ## How It Works
 
@@ -123,15 +125,120 @@ Renders and pushes every 60 seconds. The image on VSS is always fresh when the d
 │  □ Task 1               │  Today                     │
 │  □ Task 2               │    No events / event list  │
 │  □ Task 3               │  This Week                 │
-│  □ ...                  │    Tue 10 - Event...       │
-│  (fills remaining       │    Wed 11 - Event...       │
-│   space dynamically)    │    Fri 13 - Event...       │
+│  □ ...                  │    Fri 13 - Event...       │
+│  (fills remaining       │    Sat 14 - Event...       │
+│   space dynamically)    │    (tomorrow onwards)      │
 └─────────────────────────┴────────────────────────────┘
 ```
 
 ## Running as a Service
 
-### macOS (launchd)
+### Recommended: Raspberry Pi with systemd
+
+The best setup is running the dashboard loop on the **same Raspberry Pi** that hosts your VSS server. This way the display keeps updating even when your laptop is off, and the push happens over localhost with zero latency.
+
+#### 1. Set up the project on the Pi
+
+SSH into your Pi and clone the repo:
+
+```bash
+ssh youruser@192.168.x.x
+git clone https://github.com/juicecultus/joan-dashboard.git
+cd joan-dashboard
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+> **Note:** On some Pi OS versions you may need `sudo apt install python3-venv python3-dev fonts-dejavu` first.
+
+#### 2. Copy your Google credentials
+
+From your local machine (where you ran `joan_google_auth.py`):
+
+```bash
+scp credentials.json token.json youruser@192.168.x.x:~/joan-dashboard/
+```
+
+#### 3. Configure
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Since VSS is on the same Pi, set the host to localhost:
+
+```env
+VSS_HOST=127.0.0.1
+VSS_PORT=8081
+DEVICE_UUID=your-uuid-here
+WEATHER_LAT=51.509
+WEATHER_LON=-0.118
+WEATHER_LOCATION=London
+```
+
+#### 4. Test it
+
+```bash
+.venv/bin/python joan_dashboard.py --preview   # render locally
+.venv/bin/python joan_dashboard.py              # render + push once
+```
+
+#### 5. Create the systemd service
+
+```bash
+sudo tee /etc/systemd/system/joan-dashboard.service > /dev/null << 'EOF'
+[Unit]
+Description=Joan E-Ink Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/home/youruser/joan-dashboard
+ExecStart=/home/youruser/joan-dashboard/.venv/bin/python joan_dashboard.py --loop 60
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+Replace `youruser` with your Pi username.
+
+#### 6. Enable and start
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable joan-dashboard
+sudo systemctl start joan-dashboard
+```
+
+#### Managing the service
+
+```bash
+sudo systemctl status joan-dashboard    # check status
+sudo systemctl restart joan-dashboard   # restart after changes
+sudo systemctl stop joan-dashboard      # stop
+journalctl -u joan-dashboard -f         # live logs
+```
+
+#### Updating the dashboard
+
+When you push changes to GitHub:
+
+```bash
+cd ~/joan-dashboard
+git pull
+sudo systemctl restart joan-dashboard
+```
+
+### Alternative: macOS (launchd)
+
+If you prefer running the loop on your Mac instead of the Pi:
 
 Create `~/Library/LaunchAgents/com.joan.dashboard.plist`:
 
@@ -154,13 +261,8 @@ Create `~/Library/LaunchAgents/com.joan.dashboard.plist`:
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>VSS_HOST</key>
-        <string>192.168.1.100</string>
-        <key>DEVICE_UUID</key>
-        <string>your-uuid-here</string>
-    </dict>
+    <key>WorkingDirectory</key>
+    <string>/path/to/joan-dashboard</string>
 </dict>
 </plist>
 ```
@@ -170,33 +272,7 @@ Load it:
 launchctl load ~/Library/LaunchAgents/com.joan.dashboard.plist
 ```
 
-### Linux (systemd)
-
-Create `/etc/systemd/system/joan-dashboard.service`:
-
-```ini
-[Unit]
-Description=Joan Dashboard
-After=network-online.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/joan-dashboard
-EnvironmentFile=/home/pi/joan-dashboard/.env
-ExecStart=/home/pi/joan-dashboard/.venv/bin/python joan_dashboard.py --loop 60
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```bash
-sudo systemctl enable joan-dashboard
-sudo systemctl start joan-dashboard
-```
+> **Note:** The dashboard reads `.env` from the project directory automatically, so environment variables don't need to be duplicated in the plist.
 
 ## Customisation
 
@@ -229,6 +305,8 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 | Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUID` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. |
 | Fonts look wrong | Install `fonts-dejavu` on Linux (`sudo apt install fonts-dejavu`). On macOS, Helvetica is used by default. |
 | Token expired | Delete `token.json` and re-run `python joan_google_auth.py`. |
+| Service won't start on Pi | Check logs with `journalctl -u joan-dashboard -e`. Ensure `.venv` exists and deps are installed. |
+| Google auth on headless Pi | Run `joan_google_auth.py` on your laptop first, then `scp` the `token.json` and `credentials.json` to the Pi. |
 
 ## Tech Stack
 
