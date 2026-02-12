@@ -706,7 +706,7 @@ def main():
             print("[error] No valid screens in playlist")
             return
 
-        interval = max(args.loop, 60)  # minimum 60s per screen
+        interval = max(args.loop, 180)  # minimum 180s — matches Joan 3-min heartbeat
         print(f"[playlist] Rotating {len(screens)} screens, {interval}s each: {[s[0] for s in screens]}")
 
         while True:
