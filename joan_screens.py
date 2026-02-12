@@ -9,6 +9,7 @@ import json
 import os
 import random
 import textwrap
+import time
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -22,6 +23,31 @@ from joan_dashboard import (
 )
 
 PAD = 60  # generous padding for full-screen layouts
+
+
+# ── Cache layer ──────────────────────────────────────────────────────
+# Fresh-first: within TTL return cached; after TTL try fresh;
+# on failure serve stale (up to max_stale). Never serve beyond max_stale.
+
+_cache = {}  # key -> {"data": ..., "ts": float}
+
+
+def _cache_fetch(key, ttl, max_stale, fetch_fn):
+    """Cached fetch with stale fallback. Returns None if nothing available."""
+    now = time.time()
+    entry = _cache.get(key)
+    if entry and (now - entry["ts"]) < ttl:
+        return entry["data"]
+    try:
+        data = fetch_fn()
+        _cache[key] = {"data": data, "ts": now}
+        return data
+    except Exception as e:
+        print(f"[cache] '{key}' fetch failed: {e}")
+        if entry and max_stale > 0 and (now - entry["ts"]) < max_stale:
+            print(f"[cache] Serving stale '{key}' (age {int(now - entry['ts'])}s)")
+            return entry["data"]
+        return None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -113,15 +139,18 @@ def render_quote() -> Image.Image:
     quote_text = "The only way to do great work is to love what you do."
     author = "Steve Jobs"
 
-    try:
+    def _fetch():
         r = requests.get("https://zenquotes.io/api/today", timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            if data and isinstance(data, list):
-                quote_text = data[0].get("q", quote_text)
-                author = data[0].get("a", author)
-    except Exception as e:
-        print(f"[quote] API failed, using fallback: {e}")
+        r.raise_for_status()
+        data = r.json()
+        if data and isinstance(data, list):
+            return {"q": data[0].get("q", ""), "a": data[0].get("a", "")}
+        raise ValueError("No quote data")
+
+    result = _cache_fetch("quote", 21600, 86400, _fetch)  # 6h TTL, 24h stale
+    if result:
+        quote_text = result.get("q") or quote_text
+        author = result.get("a") or author
 
     # Large opening quotation mark
     draw.text((PAD + 20, 200), "\u201c", fill=200, font=get_font(200), anchor="lt")
@@ -291,27 +320,35 @@ def render_word_of_day() -> Image.Image:
     phonetic = ""
     example = ""
 
-    try:
+    def _fetch():
         r = requests.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}", timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            if data and isinstance(data, list):
-                entry = data[0]
-                phonetic = entry.get("phonetic", "")
-                if not phonetic:
-                    for p in entry.get("phonetics", []):
-                        if p.get("text"):
-                            phonetic = p["text"]
-                            break
-                meanings = entry.get("meanings", [])
-                if meanings:
-                    part_of_speech = meanings[0].get("partOfSpeech", "")
-                    defs = meanings[0].get("definitions", [])
-                    if defs:
-                        definition = defs[0].get("definition", "")
-                        example = defs[0].get("example", "")
-    except Exception as e:
-        print(f"[word] API failed: {e}")
+        r.raise_for_status()
+        data = r.json()
+        if data and isinstance(data, list):
+            e = data[0]
+            ph = e.get("phonetic", "")
+            if not ph:
+                for p in e.get("phonetics", []):
+                    if p.get("text"):
+                        ph = p["text"]
+                        break
+            pos, defn, ex = "", "", ""
+            meanings = e.get("meanings", [])
+            if meanings:
+                pos = meanings[0].get("partOfSpeech", "")
+                defs = meanings[0].get("definitions", [])
+                if defs:
+                    defn = defs[0].get("definition", "")
+                    ex = defs[0].get("example", "")
+            return {"phonetic": ph, "pos": pos, "definition": defn, "example": ex}
+        raise ValueError("No word data")
+
+    result = _cache_fetch(f"word:{word}", 43200, 86400, _fetch)  # 12h TTL, 24h stale
+    if result:
+        phonetic = result.get("phonetic", "")
+        part_of_speech = result.get("pos", "")
+        definition = result.get("definition", "")
+        example = result.get("example", "")
 
     # Header
     draw.text((WIDTH // 2, 80), "Word of the Day", fill=120, font=get_font(32), anchor="mt")
@@ -353,15 +390,16 @@ def render_this_day_in_history() -> Image.Image:
     draw = ImageDraw.Draw(img)
     now = datetime.now()
 
-    events = []
-    try:
+    def _fetch():
         url = f"https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/{now.month}/{now.day}"
         r = requests.get(url, headers={"User-Agent": "JoanDashboard/1.0"}, timeout=8)
-        if r.status_code == 200:
-            data = r.json()
-            events = data.get("events", [])
-    except Exception as e:
-        print(f"[history] API failed: {e}")
+        r.raise_for_status()
+        evts = r.json().get("events", [])
+        if not evts:
+            raise ValueError("No events")
+        return evts
+
+    events = _cache_fetch(f"history:{now.month}/{now.day}", 43200, 86400, _fetch) or []
 
     # Header
     draw.text((WIDTH // 2, 60), "On This Day", fill=0, font=get_font(60, bold=True), anchor="mt")
@@ -427,60 +465,55 @@ def render_art_gallery() -> Image.Image:
     img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
-    try:
-        # Get a random artwork with an image
-        # Use a curated search for paintings with images
+    def _fetch():
         search_url = "https://collectionapi.metmuseum.org/public/collection/v1/search"
         r = requests.get(search_url, params={"hasImages": "true", "q": "painting portrait landscape"}, timeout=8)
-        if r.status_code != 200:
-            raise Exception(f"Search failed: {r.status_code}")
-
+        r.raise_for_status()
         ids = r.json().get("objectIDs", [])
         if not ids:
-            raise Exception("No artworks found")
-
-        # Pick based on day
+            raise ValueError("No artworks found")
         day_seed = int(datetime.now().strftime("%Y%m%d")) + 42
         random.seed(day_seed)
-        obj_id = random.choice(ids[:500])  # top 500 results
+        obj_id = random.choice(ids[:500])
         random.seed()
-
-        # Fetch artwork details
         obj_url = f"https://collectionapi.metmuseum.org/public/collection/v1/objects/{obj_id}"
         r = requests.get(obj_url, timeout=8)
-        if r.status_code != 200:
-            raise Exception(f"Object fetch failed: {r.status_code}")
-
+        r.raise_for_status()
         obj = r.json()
         image_url = obj.get("primaryImageSmall") or obj.get("primaryImage")
-        title = obj.get("title", "Untitled")
-        artist = obj.get("artistDisplayName", "Unknown artist")
-        date = obj.get("objectDate", "")
-        medium = obj.get("medium", "")
-
         if not image_url:
-            raise Exception("No image available")
-
-        # Download and process image
+            raise ValueError("No image available")
         r = requests.get(image_url, timeout=15)
-        art = Image.open(BytesIO(r.content)).convert("L")
+        r.raise_for_status()
+        return {
+            "image_bytes": r.content,
+            "title": obj.get("title", "Untitled"),
+            "artist": obj.get("artistDisplayName", "Unknown artist"),
+            "date": obj.get("objectDate", ""),
+            "medium": obj.get("medium", ""),
+        }
 
-        # Scale to fit within the frame (leave room for caption)
-        art_area_h = HEIGHT - 200  # bottom 200px for caption
+    data = _cache_fetch("art", 3600, 21600, _fetch)  # 1h TTL, 6h stale
+
+    if data:
+        art = Image.open(BytesIO(data["image_bytes"])).convert("L")
+        title = data["title"]
+        artist = data["artist"]
+        date = data["date"]
+        medium = data["medium"]
+
+        art_area_h = HEIGHT - 200
         art_area_w = WIDTH - 120
-
         aw, ah = art.size
         scale = min(art_area_w / aw, art_area_h / ah)
         new_w = int(aw * scale)
         new_h = int(ah * scale)
         art = art.resize((new_w, new_h), Image.LANCZOS)
 
-        # Center the artwork
         x = (WIDTH - new_w) // 2
         y = (art_area_h - new_h) // 2 + 20
         img.paste(art, (x, y))
 
-        # Caption area
         cap_y = HEIGHT - 170
         draw.line([(PAD, cap_y - 10), (WIDTH - PAD, cap_y - 10)], fill=200, width=1)
         draw.text((WIDTH // 2, cap_y), title[:60], fill=0, font=get_font(32, bold=True), anchor="mt")
@@ -490,15 +523,12 @@ def render_art_gallery() -> Image.Image:
         draw.text((WIDTH // 2, cap_y + 42), caption_line2[:70], fill=80, font=get_font(26), anchor="mt")
         if medium:
             draw.text((WIDTH // 2, cap_y + 74), medium[:80], fill=120, font=get_font(22), anchor="mt")
-
         draw.text((WIDTH // 2, HEIGHT - 30), "The Metropolitan Museum of Art", fill=180, font=get_font(18), anchor="mm")
-        return img
-
-    except Exception as e:
-        print(f"[art] Failed: {e}")
+    else:
         draw.text((WIDTH // 2, HEIGHT // 2 - 20), "Art Gallery", fill=0, font=get_font(50, bold=True), anchor="mm")
         draw.text((WIDTH // 2, HEIGHT // 2 + 40), "Could not load artwork", fill=120, font=get_font(30), anchor="mm")
-        return img
+
+    return img
 
 
 # ── 8. Weather Radar ─────────────────────────────────────────────────
@@ -508,26 +538,17 @@ def render_weather_radar() -> Image.Image:
     img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
-    try:
-        # Get latest radar timestamp
+    def _fetch_tiles():
         r = requests.get("https://api.rainviewer.com/public/weather-maps.json", timeout=8)
-        if r.status_code != 200:
-            raise Exception(f"RainViewer API failed: {r.status_code}")
-
+        r.raise_for_status()
         data = r.json()
         radar = data.get("radar", {}).get("past", [])
         if not radar:
-            raise Exception("No radar data available")
+            raise ValueError("No radar data available")
+        ts_path = radar[-1]["path"]
 
-        latest = radar[-1]
-        ts_path = latest["path"]
-
-        # Build tile URL for our location
-        # RainViewer uses standard web map tiles (z/x/y)
         lat = float(WEATHER_LAT)
         lon = float(WEATHER_LON)
-
-        # Zoom level 7 gives a good regional view (~150km)
         zoom = 7
         import math as _math
         n = 2 ** zoom
@@ -535,13 +556,10 @@ def render_weather_radar() -> Image.Image:
         lat_rad = _math.radians(lat)
         y_tile = int((1.0 - _math.asinh(_math.tan(lat_rad)) / _math.pi) / 2.0 * n)
 
-        # Download a 3x3 grid of tiles for a wider view
         tiles_img = Image.new("RGBA", (256 * 3, 256 * 3), (0, 0, 0, 0))
-
         for dx in range(-1, 2):
             for dy in range(-1, 2):
-                tx = x_tile + dx
-                ty = y_tile + dy
+                tx, ty = x_tile + dx, y_tile + dy
                 tile_url = f"https://tilecache.rainviewer.com{ts_path}/256/{zoom}/{tx}/{ty}/2/1_1.png"
                 try:
                     tr = requests.get(tile_url, timeout=5)
@@ -551,12 +569,10 @@ def render_weather_radar() -> Image.Image:
                 except Exception:
                     pass
 
-        # Also get base map tiles (OpenStreetMap)
         base_img = Image.new("RGB", (256 * 3, 256 * 3), (240, 240, 240))
         for dx in range(-1, 2):
             for dy in range(-1, 2):
-                tx = x_tile + dx
-                ty = y_tile + dy
+                tx, ty = x_tile + dx, y_tile + dy
                 osm_url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
                 try:
                     tr = requests.get(osm_url, headers={"User-Agent": "JoanDashboard/1.0"}, timeout=5)
@@ -566,51 +582,39 @@ def render_weather_radar() -> Image.Image:
                 except Exception:
                     pass
 
-        # Composite radar over base map
         base_img = base_img.convert("RGBA")
-        base_img = Image.alpha_composite(base_img, tiles_img)
+        composite = Image.alpha_composite(base_img, tiles_img)
+        radar_gray = composite.convert("L")
 
-        # Convert to grayscale and resize to fill display
-        radar_gray = base_img.convert("L")
-
-        # Scale to fit display
         rw, rh = radar_gray.size
         scale = max(WIDTH / rw, HEIGHT / rh)
         new_w = int(rw * scale)
         new_h = int(rh * scale)
         radar_gray = radar_gray.resize((new_w, new_h), Image.LANCZOS)
-
-        # Center crop
         left = (new_w - WIDTH) // 2
         top = (new_h - HEIGHT) // 2
-        radar_gray = radar_gray.crop((left, top, left + WIDTH, top + HEIGHT))
+        return radar_gray.crop((left, top, left + WIDTH, top + HEIGHT))
 
-        img = radar_gray
+    radar_img = _cache_fetch("radar", 120, 600, _fetch_tiles)  # 2min TTL, 10min stale
 
-        # Overlay text
+    if radar_img:
+        img = radar_img.copy()
         draw = ImageDraw.Draw(img)
-        # Semi-transparent header bar
         for y in range(60):
             for x in range(WIDTH):
                 px = img.getpixel((x, y))
                 img.putpixel((x, y), min(255, px + 80))
-
         draw.text((WIDTH // 2, 30), f"Weather Radar — {WEATHER_LOCATION}", fill=0, font=get_font(30, bold=True), anchor="mm")
-
-        # Footer bar
         for y in range(HEIGHT - 50, HEIGHT):
             for x in range(WIDTH):
                 px = img.getpixel((x, y))
                 img.putpixel((x, y), min(255, px + 80))
-
         draw.text((WIDTH // 2, HEIGHT - 25), now_str(), fill=60, font=get_font(22), anchor="mm")
-        return img
-
-    except Exception as e:
-        print(f"[radar] Failed: {e}")
+    else:
         draw.text((WIDTH // 2, HEIGHT // 2 - 20), "Weather Radar", fill=0, font=get_font(50, bold=True), anchor="mm")
         draw.text((WIDTH // 2, HEIGHT // 2 + 40), "Could not load radar data", fill=120, font=get_font(30), anchor="mm")
-        return img
+
+    return img
 
 
 # ── 9. Dad Joke ─────────────────────────────────────────────────────
@@ -620,13 +624,14 @@ def render_dad_joke() -> Image.Image:
     img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
-    try:
+    def _fetch():
         r = requests.get("https://icanhazdadjoke.com/",
                          headers={"Accept": "application/json"}, timeout=10)
-        joke = r.json().get("joke", "Why did the scarecrow win an award? Because he was outstanding in his field.")
-    except Exception as e:
-        print(f"[joke] API failed: {e}")
-        joke = "I told my wife she was drawing her eyebrows too high. She looked surprised."
+        r.raise_for_status()
+        return r.json().get("joke", "")
+
+    result = _cache_fetch("joke", 0, 300, _fetch)  # always try fresh, 5min stale
+    joke = result or "I told my wife she was drawing her eyebrows too high. She looked surprised."
 
     # Title
     draw.text((WIDTH // 2, 120), "Dad Joke", fill=160, font=get_font(36), anchor="mm")
@@ -791,13 +796,14 @@ def render_rss_headlines() -> Image.Image:
     img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
-    try:
+    def _fetch():
         import feedparser
         feed = feedparser.parse(RSS_FEED_URL)
-        entries = feed.entries[:8]  # top 8 headlines
-    except Exception as e:
-        print(f"[rss] Failed to fetch feed: {e}")
-        entries = []
+        if not feed.entries:
+            raise ValueError("Empty feed")
+        return feed.entries[:8]
+
+    entries = _cache_fetch("rss", 600, 1800, _fetch) or []  # 10min TTL, 30min stale
 
     # Header
     draw.text((WIDTH // 2, 70), RSS_FEED_NAME, fill=0, font=get_font(44, bold=True), anchor="mm")
@@ -908,11 +914,17 @@ def render_stock_ticker() -> Image.Image:
     draw.text((WIDTH // 2, 120), datetime.now().strftime("%A %d %B %H:%M"), fill=140, font=get_font(26), anchor="mm")
     draw.line([(PAD, 155), (WIDTH - PAD, 155)], fill=200, width=2)
 
-    stocks = []
-    for ticker in STOCK_TICKERS:
-        data = _fetch_stock_data(ticker.strip())
-        if data:
-            stocks.append(data)
+    def _fetch_all():
+        results = []
+        for ticker in STOCK_TICKERS:
+            d = _fetch_stock_data(ticker.strip())
+            if d:
+                results.append(d)
+        if not results:
+            raise ValueError("No stock data")
+        return results
+
+    stocks = _cache_fetch("stocks", 300, 1800, _fetch_all) or []  # 5min TTL, 30min stale
 
     if not stocks:
         draw.text((WIDTH // 2, HEIGHT // 2), "Could not load market data", fill=120, font=get_font(36), anchor="mm")
@@ -971,29 +983,31 @@ def render_todo_list() -> Image.Image:
     draw.text((WIDTH // 2, 125), datetime.now().strftime("%A %d %B"), fill=140, font=get_font(28), anchor="mm")
     draw.line([(PAD, 160), (WIDTH - PAD, 160)], fill=200, width=2)
 
-    creds = get_google_creds()
-    tasks = []
-    if creds:
-        try:
-            from googleapiclient.discovery import build
-            service = build("tasks", "v1", credentials=creds)
-            tasklists = service.tasklists().list(maxResults=10).execute().get("items", [])
-            for tl in tasklists:
-                result = service.tasks().list(
-                    tasklist=tl["id"], showCompleted=False, maxResults=20
-                ).execute()
-                for t in result.get("items", []):
-                    if t.get("title", "").strip():
-                        due = ""
-                        if t.get("due"):
-                            try:
-                                due_dt = datetime.fromisoformat(t["due"].rstrip("Z"))
-                                due = due_dt.strftime("%d %b")
-                            except Exception:
-                                pass
-                        tasks.append({"title": t["title"], "due": due, "list": tl.get("title", "")})
-        except Exception as e:
-            print(f"[todo] Failed to fetch tasks: {e}")
+    def _fetch():
+        creds = get_google_creds()
+        if not creds:
+            raise ValueError("No Google credentials")
+        from googleapiclient.discovery import build
+        service = build("tasks", "v1", credentials=creds)
+        tasklists = service.tasklists().list(maxResults=10).execute().get("items", [])
+        items = []
+        for tl in tasklists:
+            result = service.tasks().list(
+                tasklist=tl["id"], showCompleted=False, maxResults=20
+            ).execute()
+            for t in result.get("items", []):
+                if t.get("title", "").strip():
+                    due = ""
+                    if t.get("due"):
+                        try:
+                            due_dt = datetime.fromisoformat(t["due"].rstrip("Z"))
+                            due = due_dt.strftime("%d %b")
+                        except Exception:
+                            pass
+                    items.append({"title": t["title"], "due": due, "list": tl.get("title", "")})
+        return items
+
+    tasks = _cache_fetch("todo_all", 120, 1800, _fetch) or []  # 2min TTL, 30min stale
 
     if not tasks:
         draw.text((WIDTH // 2, HEIGHT // 2), "No tasks!", fill=120, font=get_font(44), anchor="mm")
@@ -1001,32 +1015,24 @@ def render_todo_list() -> Image.Image:
         _footer(draw, now_str())
         return img
 
-    y = 195
-    row_h = 65
-    box_size = 28
+    dy = 195
+    LINE_H = 56
+    BX = PAD + 20  # box left edge (same as dashboard B_L)
 
     for task in tasks[:14]:  # max 14 tasks for screen space
-        mid_y = y + row_h // 2
-
-        # Checkbox — vertically centered on mid_y
-        box_top = mid_y - box_size // 2
-        draw.rectangle(
-            [PAD + 20, box_top, PAD + 20 + box_size, box_top + box_size],
-            outline=80, width=2,
-        )
-
-        # Task title — anchored to same mid_y
+        # Exact same checkbox rendering as main dashboard
+        box_top = dy + (LINE_H - 24) // 2
+        draw.rectangle([BX, box_top, BX + 24, box_top + 24], outline=60, width=2)
         title = task["title"]
         if len(title) > 55:
             title = title[:52] + "..."
-        draw.text((PAD + 70, mid_y), title, fill=20, font=get_font(32), anchor="lm")
+        draw.text((BX + 36, dy + LINE_H // 2), title, fill=20, font=get_font(26), anchor="lm")
 
-        # Due date (right side)
         if task["due"]:
-            draw.text((WIDTH - PAD - 20, mid_y), task["due"], fill=140, font=get_font(24), anchor="rm")
+            draw.text((WIDTH - PAD - 20, dy + LINE_H // 2), task["due"], fill=140, font=get_font(22), anchor="rm")
 
-        y += row_h
-        if y > HEIGHT - 80:
+        dy += LINE_H
+        if dy > HEIGHT - 80:
             break
 
     # Task count footer

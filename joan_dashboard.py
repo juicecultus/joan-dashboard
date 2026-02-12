@@ -203,9 +203,16 @@ def get_google_creds():
         return None
 
 
+_events_cache = {"data": None, "ts": 0}
+
 def fetch_week_events() -> dict:
     """Fetch this week's events (Mon-Sun) from ALL Google Calendars.
-    Returns dict keyed by date string 'YYYY-MM-DD' -> list of events."""
+    Returns dict keyed by date string 'YYYY-MM-DD' -> list of events.
+    Cached for 2 min; stale fallback up to 30 min."""
+    now_ts = time.time()
+    if _events_cache["data"] is not None and (now_ts - _events_cache["ts"]) < 120:
+        return _events_cache["data"]
+
     creds = get_google_creds()
     now = datetime.now()
     # Find Monday of current week
@@ -259,15 +266,27 @@ def fetch_week_events() -> dict:
         # Sort each day's events by time
         for date_key in week:
             week[date_key].sort(key=lambda e: e["time"] or "00:00")
+        _events_cache["data"] = week
+        _events_cache["ts"] = time.time()
         return week
     except Exception as e:
         print(f"[calendar] Failed: {e}")
+        if _events_cache["data"] is not None and (time.time() - _events_cache["ts"]) < 1800:
+            print(f"[cache] Serving stale calendar (age {int(time.time() - _events_cache['ts'])}s)")
+            return _events_cache["data"]
         return week
 
 
 # --- Google Tasks ---
+_tasks_cache = {"data": None, "ts": 0}
+
 def fetch_tasks() -> list:
-    """Fetch incomplete tasks from Google Tasks (default list)."""
+    """Fetch incomplete tasks from Google Tasks (default list).
+    Cached for 2 min; stale fallback up to 30 min."""
+    now_ts = time.time()
+    if _tasks_cache["data"] is not None and (now_ts - _tasks_cache["ts"]) < 120:
+        return _tasks_cache["data"]
+
     creds = get_google_creds()
     if not creds:
         return []
@@ -300,9 +319,14 @@ def fetch_tasks() -> list:
                     except ValueError:
                         pass
                 tasks.append({"title": title, "due": due_str})
+        _tasks_cache["data"] = tasks
+        _tasks_cache["ts"] = time.time()
         return tasks
     except Exception as e:
         print(f"[tasks] Failed: {e}")
+        if _tasks_cache["data"] is not None and (time.time() - _tasks_cache["ts"]) < 1800:
+            print(f"[cache] Serving stale tasks (age {int(time.time() - _tasks_cache['ts'])}s)")
+            return _tasks_cache["data"]
         return []
 
 
