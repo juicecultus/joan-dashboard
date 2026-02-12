@@ -613,6 +613,428 @@ def render_weather_radar() -> Image.Image:
         return img
 
 
+# ── 9. Dad Joke ─────────────────────────────────────────────────────
+
+def render_dad_joke() -> Image.Image:
+    """Display a random dad joke from icanhazdadjoke.com."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    try:
+        r = requests.get("https://icanhazdadjoke.com/",
+                         headers={"Accept": "application/json"}, timeout=10)
+        joke = r.json().get("joke", "Why did the scarecrow win an award? Because he was outstanding in his field.")
+    except Exception as e:
+        print(f"[joke] API failed: {e}")
+        joke = "I told my wife she was drawing her eyebrows too high. She looked surprised."
+
+    # Title
+    draw.text((WIDTH // 2, 120), "Dad Joke", fill=160, font=get_font(36), anchor="mm")
+
+    # Draw a small divider
+    div_w = 200
+    draw.line([(WIDTH // 2 - div_w // 2, 160), (WIDTH // 2 + div_w // 2, 160)], fill=180, width=2)
+
+    # Joke text — large and centered
+    y = _centered_text(draw, 240, joke, size=52, bold=False, fill=20, max_width=WIDTH - 200)
+
+    # Emoji-style decoration at bottom
+    draw.text((WIDTH // 2, HEIGHT - 100), "😄", fill=160, font=get_font(60), anchor="mm")
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 10. Year Progress ───────────────────────────────────────────────
+
+def render_year_progress() -> Image.Image:
+    """Visual progress bar showing how far through the year we are."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+    now = datetime.now()
+
+    year_start = datetime(now.year, 1, 1)
+    year_end = datetime(now.year + 1, 1, 1)
+    total_days = (year_end - year_start).days
+    day_of_year = (now - year_start).days + 1
+    pct = day_of_year / total_days
+
+    # Title
+    draw.text((WIDTH // 2, 140), str(now.year), fill=0, font=get_font(80, bold=True), anchor="mm")
+
+    # Subtitle
+    draw.text((WIDTH // 2, 220), f"Day {day_of_year} of {total_days}", fill=80, font=get_font(40), anchor="mm")
+
+    # Big percentage
+    draw.text((WIDTH // 2, 360), f"{pct * 100:.1f}%", fill=0, font=get_font(120, bold=True), anchor="mm")
+
+    # Progress bar
+    bar_x = 160
+    bar_w = WIDTH - 320
+    bar_y = 480
+    bar_h = 60
+    # Background
+    draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], radius=bar_h // 2, fill=220)
+    # Filled portion
+    fill_w = int(bar_w * pct)
+    if fill_w > bar_h:  # only draw if enough for rounded rect
+        draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + bar_h], radius=bar_h // 2, fill=60)
+
+    # Month markers below bar
+    month_names = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
+    for i, m in enumerate(month_names):
+        mx = bar_x + int(bar_w * (i + 0.5) / 12)
+        draw.text((mx, bar_y + bar_h + 25), m, fill=140, font=get_font(20), anchor="mt")
+
+    # Days remaining
+    days_left = total_days - day_of_year
+    draw.text((WIDTH // 2, 640), f"{days_left} days remaining", fill=100, font=get_font(36), anchor="mm")
+
+    # Weeks remaining
+    weeks_left = days_left // 7
+    draw.text((WIDTH // 2, 700), f"({weeks_left} weeks)", fill=140, font=get_font(28), anchor="mm")
+
+    # Quarter info
+    quarter = (now.month - 1) // 3 + 1
+    quarter_start = datetime(now.year, (quarter - 1) * 3 + 1, 1)
+    if quarter < 4:
+        quarter_end = datetime(now.year, quarter * 3 + 1, 1)
+    else:
+        quarter_end = datetime(now.year + 1, 1, 1)
+    q_pct = (now - quarter_start).days / (quarter_end - quarter_start).days * 100
+    draw.text((WIDTH // 2, 800), f"Q{quarter}: {q_pct:.0f}% complete", fill=120, font=get_font(30), anchor="mm")
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 11. Maths Challenge ─────────────────────────────────────────────
+
+def render_maths_challenge() -> Image.Image:
+    """Daily maths puzzles for the kids — mix of operations and difficulty."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    # Title
+    draw.text((WIDTH // 2, 80), "Maths Challenge", fill=0, font=get_font(50, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 130), datetime.now().strftime("%A %d %B"), fill=120, font=get_font(28), anchor="mm")
+
+    # Generate 8 problems of varying difficulty
+    problems = []
+    # Easy: addition/subtraction
+    a, b = random.randint(10, 99), random.randint(10, 99)
+    problems.append(f"{a} + {b} = ?")
+    a, b = random.randint(30, 99), random.randint(10, 49)
+    problems.append(f"{a} − {b} = ?")
+    # Medium: multiplication
+    a, b = random.randint(3, 12), random.randint(3, 12)
+    problems.append(f"{a} × {b} = ?")
+    a, b = random.randint(6, 15), random.randint(4, 9)
+    problems.append(f"{a} × {b} = ?")
+    # Harder: division (ensure clean division)
+    b = random.randint(3, 12)
+    a = b * random.randint(3, 15)
+    problems.append(f"{a} ÷ {b} = ?")
+    # Fractions
+    n = random.randint(1, 5)
+    d = random.choice([2, 3, 4, 5, 8, 10])
+    n2 = random.randint(1, 5)
+    problems.append(f"{n}/{d} + {n2}/{d} = ?")
+    # Percentage
+    pct = random.choice([10, 20, 25, 50, 75])
+    val = random.choice([40, 60, 80, 100, 120, 200, 500])
+    problems.append(f"{pct}% of {val} = ?")
+    # Squared
+    sq = random.randint(4, 15)
+    problems.append(f"{sq}² = ?")
+
+    random.shuffle(problems)
+
+    # Draw problems in two columns
+    col_x = [320, 960]
+    start_y = 220
+    row_h = 110
+
+    for i, problem in enumerate(problems):
+        col = i % 2
+        row = i // 2
+        x = col_x[col]
+        y = start_y + row * row_h
+
+        # Number circle
+        draw.ellipse([x - 180, y - 20, x - 140, y + 20], outline=80, width=2)
+        draw.text((x - 160, y), str(i + 1), fill=80, font=get_font(22, bold=True), anchor="mm")
+
+        # Problem text
+        draw.text((x - 110, y), problem, fill=20, font=get_font(40), anchor="lm")
+
+    # Footer encouragement
+    encouragements = [
+        "Can you solve them all?", "No calculators allowed!",
+        "Show your working!", "Time yourself!",
+        "Beat yesterday's time!", "You've got this!",
+    ]
+    draw.text((WIDTH // 2, HEIGHT - 100), random.choice(encouragements), fill=140, font=get_font(30), anchor="mm")
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 12. RSS Headlines ───────────────────────────────────────────────
+
+RSS_FEED_URL = os.environ.get("RSS_FEED_URL", "https://www.theverge.com/rss/index.xml")
+RSS_FEED_NAME = os.environ.get("RSS_FEED_NAME", "The Verge")
+
+
+def render_rss_headlines() -> Image.Image:
+    """Display latest headlines from an RSS feed."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    try:
+        import feedparser
+        feed = feedparser.parse(RSS_FEED_URL)
+        entries = feed.entries[:8]  # top 8 headlines
+    except Exception as e:
+        print(f"[rss] Failed to fetch feed: {e}")
+        entries = []
+
+    # Header
+    draw.text((WIDTH // 2, 70), RSS_FEED_NAME, fill=0, font=get_font(44, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 115), "Latest Headlines", fill=140, font=get_font(26), anchor="mm")
+    draw.line([(PAD, 145), (WIDTH - PAD, 145)], fill=200, width=2)
+
+    if not entries:
+        draw.text((WIDTH // 2, HEIGHT // 2), "Could not load feed", fill=120, font=get_font(36), anchor="mm")
+        _footer(draw, now_str())
+        return img
+
+    y = 175
+    for i, entry in enumerate(entries):
+        title = entry.get("title", "Untitled")
+        published = ""
+        if hasattr(entry, "published_parsed") and entry.published_parsed:
+            from time import mktime
+            pub_dt = datetime.fromtimestamp(mktime(entry.published_parsed))
+            published = pub_dt.strftime("%H:%M")
+
+        # Bullet number
+        draw.text((PAD + 10, y + 2), f"{i + 1}.", fill=140, font=get_font(28, bold=True), anchor="lt")
+
+        # Title (wrap if needed)
+        title_font = get_font(30)
+        max_w = WIDTH - PAD * 2 - 80
+        # Simple word wrap
+        words = title.split()
+        lines = []
+        line = ""
+        for word in words:
+            test = f"{line} {word}".strip()
+            if title_font.getlength(test) > max_w:
+                if line:
+                    lines.append(line)
+                line = word
+            else:
+                line = test
+        if line:
+            lines.append(line)
+
+        for j, ln in enumerate(lines[:2]):  # max 2 lines per headline
+            draw.text((PAD + 60, y), ln, fill=20 if j == 0 else 60, font=get_font(30 if j == 0 else 26), anchor="lt")
+            y += 36
+
+        # Time stamp
+        if published:
+            draw.text((WIDTH - PAD - 10, y - 36), published, fill=160, font=get_font(22), anchor="rt")
+
+        y += 20  # gap between headlines
+
+        if y > HEIGHT - 80:
+            break
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 13. Stock Ticker ────────────────────────────────────────────────
+
+STOCK_TICKERS = os.environ.get("STOCK_TICKERS", "^FTSE,^GSPC,AAPL,MSFT,GOOGL,AMZN").split(",")
+
+
+def _fetch_stock_data(ticker):
+    """Fetch current price and change from Yahoo Finance."""
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+        data = r.json()
+        meta = data["chart"]["result"][0]["meta"]
+        price = meta["regularMarketPrice"]
+        prev_close = meta.get("chartPreviousClose", meta.get("previousClose", price))
+        change = price - prev_close
+        change_pct = (change / prev_close * 100) if prev_close else 0
+        return {
+            "ticker": ticker,
+            "name": _ticker_name(ticker),
+            "price": price,
+            "change": change,
+            "change_pct": change_pct,
+            "currency": meta.get("currency", "USD"),
+        }
+    except Exception as e:
+        print(f"[stock] Failed to fetch {ticker}: {e}")
+        return None
+
+
+def _ticker_name(ticker):
+    """Friendly names for common tickers."""
+    names = {
+        "^FTSE": "FTSE 100", "^GSPC": "S&P 500", "^DJI": "Dow Jones",
+        "^IXIC": "NASDAQ", "^N225": "Nikkei 225",
+        "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet",
+        "AMZN": "Amazon", "TSLA": "Tesla", "META": "Meta",
+        "NVDA": "NVIDIA", "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum",
+    }
+    return names.get(ticker, ticker)
+
+
+def render_stock_ticker() -> Image.Image:
+    """Display stock prices and daily changes."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    # Header
+    draw.text((WIDTH // 2, 70), "Markets", fill=0, font=get_font(50, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 120), datetime.now().strftime("%A %d %B %H:%M"), fill=140, font=get_font(26), anchor="mm")
+    draw.line([(PAD, 155), (WIDTH - PAD, 155)], fill=200, width=2)
+
+    stocks = []
+    for ticker in STOCK_TICKERS:
+        data = _fetch_stock_data(ticker.strip())
+        if data:
+            stocks.append(data)
+
+    if not stocks:
+        draw.text((WIDTH // 2, HEIGHT // 2), "Could not load market data", fill=120, font=get_font(36), anchor="mm")
+        _footer(draw, now_str())
+        return img
+
+    y = 190
+    row_h = (HEIGHT - 280) // min(len(stocks), 8)
+    row_h = min(row_h, 120)
+
+    for s in stocks:
+        # Ticker name
+        draw.text((PAD + 20, y), s["name"], fill=0, font=get_font(34, bold=True), anchor="lt")
+
+        # Price
+        if s["currency"] == "GBp":
+            price_str = f"{s['price']:,.0f}p"
+        elif s["currency"] == "GBP":
+            price_str = f"£{s['price']:,.2f}"
+        elif s["currency"] == "USD":
+            price_str = f"${s['price']:,.2f}"
+        elif s["currency"] == "EUR":
+            price_str = f"€{s['price']:,.2f}"
+        else:
+            price_str = f"{s['price']:,.2f}"
+
+        draw.text((WIDTH - PAD - 20, y), price_str, fill=0, font=get_font(34, bold=True), anchor="rt")
+
+        # Change line
+        arrow = "▲" if s["change"] >= 0 else "▼"
+        change_str = f"{arrow} {abs(s['change']):,.2f} ({abs(s['change_pct']):.2f}%)"
+        fill = 40 if s["change"] >= 0 else 80
+        draw.text((PAD + 20, y + 42), s["ticker"], fill=160, font=get_font(22), anchor="lt")
+        draw.text((WIDTH - PAD - 20, y + 42), change_str, fill=fill, font=get_font(26), anchor="rt")
+
+        y += row_h
+
+        if y > HEIGHT - 80:
+            break
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 14. Google Tasks Todo ───────────────────────────────────────────
+
+def render_todo_list() -> Image.Image:
+    """Full-screen Google Tasks view — large, readable, standalone."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    from joan_dashboard import get_google_creds
+
+    # Header
+    draw.text((WIDTH // 2, 70), "To Do", fill=0, font=get_font(56, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 125), datetime.now().strftime("%A %d %B"), fill=140, font=get_font(28), anchor="mm")
+    draw.line([(PAD, 160), (WIDTH - PAD, 160)], fill=200, width=2)
+
+    creds = get_google_creds()
+    tasks = []
+    if creds:
+        try:
+            from googleapiclient.discovery import build
+            service = build("tasks", "v1", credentials=creds)
+            tasklists = service.tasklists().list(maxResults=10).execute().get("items", [])
+            for tl in tasklists:
+                result = service.tasks().list(
+                    tasklist=tl["id"], showCompleted=False, maxResults=20
+                ).execute()
+                for t in result.get("items", []):
+                    if t.get("title", "").strip():
+                        due = ""
+                        if t.get("due"):
+                            try:
+                                due_dt = datetime.fromisoformat(t["due"].rstrip("Z"))
+                                due = due_dt.strftime("%d %b")
+                            except Exception:
+                                pass
+                        tasks.append({"title": t["title"], "due": due, "list": tl.get("title", "")})
+        except Exception as e:
+            print(f"[todo] Failed to fetch tasks: {e}")
+
+    if not tasks:
+        draw.text((WIDTH // 2, HEIGHT // 2), "No tasks!", fill=120, font=get_font(44), anchor="mm")
+        draw.text((WIDTH // 2, HEIGHT // 2 + 60), "All caught up ✓", fill=160, font=get_font(30), anchor="mm")
+        _footer(draw, now_str())
+        return img
+
+    y = 195
+    row_h = 65
+    box_size = 28
+
+    for task in tasks[:14]:  # max 14 tasks for screen space
+        # Checkbox
+        box_top = y + (row_h - box_size) // 2
+        draw.rectangle(
+            [PAD + 20, box_top, PAD + 20 + box_size, box_top + box_size],
+            outline=80, width=2,
+        )
+
+        # Task title
+        title = task["title"]
+        if len(title) > 55:
+            title = title[:52] + "..."
+        draw.text((PAD + 70, y + row_h // 2), title, fill=20, font=get_font(32), anchor="lm")
+
+        # Due date (right side)
+        if task["due"]:
+            draw.text((WIDTH - PAD - 20, y + row_h // 2), task["due"], fill=140, font=get_font(24), anchor="rm")
+
+        y += row_h
+        if y > HEIGHT - 80:
+            break
+
+    # Task count footer
+    if len(tasks) > 14:
+        draw.text((WIDTH // 2, HEIGHT - 70), f"+{len(tasks) - 14} more tasks", fill=160, font=get_font(24), anchor="mm")
+
+    _footer(draw, now_str())
+    return img
+
+
 # ── Utility ──────────────────────────────────────────────────────────
 
 def now_str():
@@ -630,4 +1052,10 @@ ALL_SCREENS = {
     "history": render_this_day_in_history,
     "art": render_art_gallery,
     "radar": render_weather_radar,
+    "joke": render_dad_joke,
+    "progress": render_year_progress,
+    "maths": render_maths_challenge,
+    "rss": render_rss_headlines,
+    "stocks": render_stock_ticker,
+    "todo": render_todo_list,
 }

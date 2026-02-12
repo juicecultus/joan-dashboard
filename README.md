@@ -15,7 +15,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Room temperature** — from the Joan's built-in LM75 sensor (via VSS API)
 - **Battery level** — live device battery percentage from VSS
 
-### Playlist Screens (8 rotating screens)
+### Playlist Screens (14 rotating screens)
 - **Daily Agenda** — large-font view of today's events, readable across the room
 - **Motivational Quote** — daily quote from [ZenQuotes](https://zenquotes.io/) API
 - **Countdown** — days until your next calendar events ("School breaks up — Tomorrow")
@@ -24,6 +24,12 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **This Day in History** — notable historical events from [Wikipedia](https://en.wikipedia.org/api/rest_v1/)
 - **Art Gallery** — random artwork from [The Metropolitan Museum of Art](https://metmuseum.github.io/) collection, displayed with title, artist, and medium
 - **Weather Radar** — live precipitation map from [RainViewer](https://www.rainviewer.com/api.html) overlaid on [OpenStreetMap](https://www.openstreetmap.org/) tiles
+- **Dad Joke** — random joke from [icanhazdadjoke](https://icanhazdadjoke.com/) API, new joke each rotation
+- **Year Progress** — visual progress bar showing day/percentage/quarter through the year
+- **Maths Challenge** — 8 random problems (addition, multiplication, fractions, percentages, squares) for the kids
+- **RSS Headlines** — latest headlines from any RSS feed (default: [The Verge](https://www.theverge.com/)), configurable via `RSS_FEED_URL`
+- **Stock Ticker** — live market prices and daily changes from [Yahoo Finance](https://finance.yahoo.com/), configurable tickers via `STOCK_TICKERS`
+- **Google Tasks Todo** — full-screen task list with checkboxes, pulled from all your Google Tasks lists
 
 ### System
 - **Playlist rotation** — configurable screen order and interval
@@ -312,6 +318,12 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `history` | 4 events on this date in history | Wikipedia API |
 | `art` | Random artwork from the Met | Metropolitan Museum of Art API |
 | `radar` | Live precipitation radar map | RainViewer + OpenStreetMap |
+| `joke` | Random dad joke | icanhazdadjoke API |
+| `progress` | Year progress bar + stats | Pure calculation |
+| `maths` | 8 maths problems for kids | Generated locally |
+| `rss` | Latest headlines from RSS feed | Any RSS feed (default: The Verge) |
+| `stocks` | Stock prices + daily change | Yahoo Finance |
+| `todo` | Full-screen task list | Google Tasks API |
 
 ## Running as a Service
 
