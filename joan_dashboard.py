@@ -364,8 +364,8 @@ def render_dashboard() -> Image.Image:
     # ═══════════════════════════════════════════════
 
     # ── Col 1: Clock ──
-    clock_cx = (L + H_COL1_END) // 2 + 20
-    draw.text((clock_cx, HEADER_H // 2 - 10), now.strftime("%H:%M"), fill=0, font=get_font(140, bold=True), anchor="mm")
+    clock_cx = (L + H_COL1_END) // 2
+    draw.text((clock_cx, HEADER_H // 2 - 10), now.strftime("%H:%M"), fill=0, font=get_font(130, bold=True), anchor="mm")
 
     vline(H_COL1_END + 10, PAD, HEADER_H - PAD)
 
