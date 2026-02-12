@@ -38,6 +38,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 ### System
 - **Playlist rotation** — configurable screen order and interval
 - **Smart caching** — fresh-first with stale fallback; shared calendar/tasks data across screens, per-screen TTLs (2min–12h), resilient to API outages
+- **Active hours** — only refreshes during configurable hours (default: 07:00–21:00), sleeps overnight to save resources
 - **Auto-refresh** — configurable loop interval (default: 180 seconds per screen, matching Joan's 3-min heartbeat)
 - **Preview mode** — render any screen locally without pushing to the device
 - **Runs on Raspberry Pi** — deploy as a systemd service alongside VSS for always-on operation
