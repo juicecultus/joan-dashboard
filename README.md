@@ -29,10 +29,102 @@ Joan devices are thin clients. They don't run apps — instead, they periodicall
 
 | Requirement | Notes |
 |---|---|
-| **Joan 13" device** | Any Joan device managed by VSS |
-| **Visionect Software Suite** | Running on a Raspberry Pi, server, or VM ([install guide](https://docs.visionect.com/)) |
+| **Joan 13" device** | Any Joan / Visionect Place & Play e-ink display |
+| **Raspberry Pi** (or any Linux host) | To run VSS + this dashboard |
+| **Docker & Docker Compose** | For the Visionect Software Suite |
+| **Joan Configurator** | Desktop app to redirect the device (one-time, via USB) |
+| **Micro-USB cable** | To connect Joan to your computer for configuration |
 | **Python 3.9+** | With pip |
 | **Google account** | For Calendar and Tasks integration |
+
+## Setting Up VSS (Visionect Software Suite)
+
+Joan devices are thin clients — they don't run apps. They connect to a **Visionect Software Suite (VSS)** server that tells them what to display. By default, Joan devices point to `getjoan.com` (the paid cloud service). We replace that with a **self-hosted VSS** on your local network — **no Joan subscription required**.
+
+### 1. Install Docker on your Raspberry Pi
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in for group change to take effect
+```
+
+### 2. Run VSS with Docker Compose
+
+Create a `docker-compose.yml` (e.g. in `~/vss/`):
+
+```yaml
+version: "3"
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: vss
+      POSTGRES_USER: vss
+      POSTGRES_PASSWORD: vss
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  vss:
+    image: visionect/visionect-server-v3-armhf
+    ports:
+      - "8081:8081"    # Management web UI
+      - "11112:11112"  # Device connection (TCP)
+      - "11113:11113"  # Device connection (encrypted)
+    environment:
+      DB_HOST: postgres
+      DB_NAME: vss
+      DB_USER: vss
+      DB_PASS: vss
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+```
+
+> **Note:** Use `visionect/visionect-server-v3-armhf` for Raspberry Pi (ARM). On x86/amd64 hosts, use `visionect/visionect-server-v3` instead.
+
+```bash
+cd ~/vss
+docker compose up -d
+```
+
+Verify VSS is running by opening `http://<pi-ip>:8081` in a browser. You should see the VSS management UI. Default login is `admin` / `visionect1`.
+
+### 3. Redirect the Joan device to your local VSS
+
+Out of the box, Joan devices connect to `getjoan.com`. You need to point your device at your local VSS server using the **Joan Configurator** desktop app and a Micro-USB cable.
+
+1. **Download Joan Configurator** from [Visionect support](https://www.visionect.com/support/) (available for macOS, Windows, Linux)
+2. **Connect your Joan device** to your computer via the **Micro-USB** port (not USB-C — that's power only)
+3. Open Joan Configurator — it should detect your device
+4. Under **Server settings**, change:
+   - **Server address**: your Pi's IP (e.g. `192.168.1.100`)
+   - **Server port**: `11113`
+   - **Mode**: On-Premises
+5. Configure **WiFi** credentials if not already set
+6. Click **Save** and **Reboot** the device
+
+The device will now connect to your local VSS instead of the Joan cloud.
+
+> **Tip:** You can verify the server address was changed by checking the Configurator's readback, or via the serial console if you have one connected.
+
+### 4. Verify the device appears in VSS
+
+After rebooting, the Joan device should connect to your VSS within a minute or two.
+
+1. Open `http://<pi-ip>:8081` in a browser
+2. Go to **Devices**
+3. Your device should appear with its UUID (e.g. `35005a00-0150-4d35-...`)
+4. **Copy the UUID** — you'll need it for the dashboard configuration
+
+If the device doesn't appear, check that:
+- The Pi and Joan are on the same network
+- Ports 11112/11113 are not blocked by a firewall
+- The device is charged and powered on
 
 ## Quick Start
 
