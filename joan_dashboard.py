@@ -643,8 +643,61 @@ def main():
     parser = argparse.ArgumentParser(description="Joan Dashboard")
     parser.add_argument("--loop", type=int, default=0, help="Re-render interval in seconds (0 = once)")
     parser.add_argument("--preview", action="store_true", help="Save preview PNG without pushing")
+    parser.add_argument("--playlist", type=str, default="",
+                        help="Comma-separated screen names to rotate (e.g. 'dashboard,agenda,quote,art')")
+    parser.add_argument("--screen", type=str, default="",
+                        help="Render a single screen by name (e.g. 'quote', 'art', 'radar')")
     args = parser.parse_args()
 
+    # Single named screen (for preview/testing)
+    if args.screen:
+        from joan_screens import ALL_SCREENS
+        if args.screen not in ALL_SCREENS:
+            print(f"[error] Unknown screen '{args.screen}'. Available: {', '.join(ALL_SCREENS.keys())}")
+            return
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering screen: {args.screen}")
+        img = ALL_SCREENS[args.screen]()
+        if args.preview:
+            path = f"joan_preview_{args.screen}.png"
+            img.save(path)
+            print(f"[preview] Saved to {path}")
+        else:
+            push_image(img)
+        return
+
+    # Playlist mode
+    if args.playlist:
+        from joan_screens import ALL_SCREENS
+        screen_names = [s.strip() for s in args.playlist.split(",") if s.strip()]
+        screens = []
+        for name in screen_names:
+            if name == "dashboard":
+                screens.append(("dashboard", render_dashboard))
+            elif name in ALL_SCREENS:
+                screens.append((name, ALL_SCREENS[name]))
+            else:
+                print(f"[warn] Unknown screen '{name}', skipping. Available: dashboard, {', '.join(ALL_SCREENS.keys())}")
+
+        if not screens:
+            print("[error] No valid screens in playlist")
+            return
+
+        interval = max(args.loop, 60)  # minimum 60s per screen
+        print(f"[playlist] Rotating {len(screens)} screens, {interval}s each: {[s[0] for s in screens]}")
+
+        while True:
+            for name, render_fn in screens:
+                try:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name}")
+                    img = render_fn()
+                    push_image(img)
+                except Exception as e:
+                    print(f"[{name}] Error: {e}")
+                print(f"[playlist] Next screen in {interval}s")
+                time.sleep(interval)
+        return
+
+    # Default: dashboard only
     while True:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering dashboard...")
         img = render_dashboard()
