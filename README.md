@@ -95,13 +95,24 @@ Verify VSS is running by opening `http://<pi-ip>:8081` in a browser. You should 
 
 ### 3. Redirect the Joan device to your local VSS
 
-Out of the box, Joan devices connect to `getjoan.com`. You need to point your device at your local VSS server using the **serial console** over the Micro-USB port.
+Out of the box, Joan devices connect to `getjoan.com`. You need to point your device at your local VSS server. There are three ways to do this — all require connecting the Joan to your computer via the **Micro-USB** port (not USB-C — that's power only).
 
-The Joan's Micro-USB port exposes an **FTDI USB UART** (not USB-C — that's power only). Connect it to your computer and you get a serial CLI at 115200 baud.
+#### Option A: Joan Configurator (easiest)
 
-#### Option A: Use the included redirect script
+Visionect provides a desktop app with a GUI for device configuration.
 
-A ready-made script is included in this repo. Edit the IP and port at the top, then run:
+1. **Download Joan Configurator** from [Visionect support](https://www.visionect.com/support/) (macOS, Windows, Linux)
+2. **Connect your Joan** via Micro-USB — the Configurator should detect it automatically
+3. Under **Server settings**, change:
+   - **Server address**: your Pi's IP (e.g. `192.168.1.100`)
+   - **Server port**: `11113`
+   - **Mode**: On-Premises
+4. Configure **WiFi** if not already set
+5. Click **Save** and **Reboot**
+
+#### Option B: Use the included redirect script
+
+If the Configurator isn't available or you prefer the command line, a ready-made script is included in this repo. It connects via the FTDI USB UART serial console exposed on the Micro-USB port.
 
 ```bash
 pip install pyserial
@@ -115,9 +126,9 @@ This will:
 3. Save to flash
 4. Reboot the device
 
-#### Option B: Manual serial commands
+#### Option C: Manual serial commands
 
-Connect to the serial port with any terminal (e.g. `screen`, `minicom`, or `picocom`):
+Connect to the serial port with any terminal (e.g. `screen`, `minicom`, or `picocom`) at **115200 baud**:
 
 ```bash
 # macOS example — your device path may differ
@@ -133,9 +144,9 @@ flash_save                               # persist to flash
 reboot                                   # reboot to connect to new server
 ```
 
-> **Finding your serial port:** On macOS, look for `/dev/cu.usbserial-*`. On Linux, it's typically `/dev/ttyUSB0`. The FTDI chip will appear as soon as you plug in the Micro-USB cable.
+> **Finding your serial port:** On macOS, look for `/dev/cu.usbserial-*`. On Linux, it's typically `/dev/ttyUSB0`. The FTDI chip appears as soon as you plug in the Micro-USB cable.
 
-The device will now connect to your local VSS instead of the Joan cloud.
+After any of these methods, the device will connect to your local VSS instead of the Joan cloud.
 
 ### 4. Verify the device appears in VSS
 
