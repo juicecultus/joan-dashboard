@@ -669,6 +669,8 @@ def main():
     parser.add_argument("--preview", action="store_true", help="Save preview PNG without pushing")
     parser.add_argument("--playlist", type=str, default="",
                         help="Comma-separated screen names to rotate (e.g. 'dashboard,agenda,quote,art')")
+    parser.add_argument("--active-hours", type=str, default="07:00-21:00",
+                        help="Only refresh during these hours (default: 07:00-21:00)")
     parser.add_argument("--screen", type=str, default="",
                         help="Render a single screen by name (e.g. 'quote', 'art', 'radar')")
     args = parser.parse_args()
@@ -707,10 +709,34 @@ def main():
             return
 
         interval = max(args.loop, 180)  # minimum 180s — matches Joan 3-min heartbeat
-        print(f"[playlist] Rotating {len(screens)} screens, {interval}s each: {[s[0] for s in screens]}")
+        # Parse active hours
+        try:
+            start_str, end_str = args.active_hours.split("-")
+            active_start = int(start_str.split(":")[0]) * 60 + int(start_str.split(":")[1])
+            active_end = int(end_str.split(":")[0]) * 60 + int(end_str.split(":")[1])
+        except (ValueError, IndexError):
+            active_start, active_end = 7 * 60, 21 * 60  # default 07:00-21:00
+
+        print(f"[playlist] Rotating {len(screens)} screens, {interval}s each, active {args.active_hours}: {[s[0] for s in screens]}")
 
         while True:
+            now_mins = datetime.now().hour * 60 + datetime.now().minute
+            if now_mins < active_start or now_mins >= active_end:
+                wake_at = active_start if now_mins >= active_end else active_start
+                now_m = datetime.now().hour * 60 + datetime.now().minute
+                if now_m >= active_end:
+                    sleep_mins = (24 * 60 - now_m) + wake_at
+                else:
+                    sleep_mins = wake_at - now_m
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
+                time.sleep(sleep_mins * 60)
+                continue
+
             for name, render_fn in screens:
+                # Re-check active hours before each screen
+                now_mins = datetime.now().hour * 60 + datetime.now().minute
+                if now_mins < active_start or now_mins >= active_end:
+                    break
                 try:
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name}")
                     img = render_fn()
