@@ -15,7 +15,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Room temperature** — from the Joan's built-in LM75 sensor (via VSS API)
 - **Battery level** — live device battery percentage from VSS
 
-### Playlist Screens (14 rotating screens)
+### Playlist Screens (18 rotating screens)
 - **Daily Agenda** — large-font view of today's events, readable across the room
 - **Motivational Quote** — daily quote from [ZenQuotes](https://zenquotes.io/) API
 - **Countdown** — days until your next calendar events ("School breaks up — Tomorrow")
@@ -30,6 +30,10 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **RSS Headlines** — latest headlines from any RSS feed (default: [The Verge](https://www.theverge.com/)), configurable via `RSS_FEED_URL`
 - **Stock Ticker** — live market prices and daily changes from [Yahoo Finance](https://finance.yahoo.com/), configurable tickers via `STOCK_TICKERS`
 - **Google Tasks Todo** — full-screen task list with checkboxes, pulled from all your Google Tasks lists
+- **Moon Phase** — drawn moon with illumination %, phase name, crater detail, and countdown to next full/new moon (pure calculation, no API)
+- **Air Quality** — European/US AQI, PM2.5, PM10, NO₂, Ozone, UV Index from [Open-Meteo](https://open-meteo.com/en/docs/air-quality-api) (free, no API key)
+- **Analogue Clock** — beautiful clock face with hour/minute/second hands, date window, 60 tick marks, filling the full 13" display
+- **Upcoming Movies** — featured movie with poster, rating, synopsis + "also coming soon" list from [TMDB](https://www.themoviedb.org/) (free API key required via `TMDB_API_KEY`)
 
 ### System
 - **Playlist rotation** — configurable screen order and interval
@@ -325,6 +329,10 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `rss` | Latest headlines from RSS feed | Any RSS feed (default: The Verge) |
 | `stocks` | Stock prices + daily change | Yahoo Finance |
 | `todo` | Full-screen task list | Google Tasks API |
+| `moon` | Moon phase with drawn moon | Pure calculation |
+| `airquality` | AQI, pollutants, UV index | Open-Meteo Air Quality API |
+| `clock` | Analogue clock face | System time |
+| `movies` | Upcoming cinema releases | TMDB API (key required) |
 
 ## Running as a Service
 

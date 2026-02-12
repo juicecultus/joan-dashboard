@@ -6,6 +6,7 @@ Each render_* function returns a 1600x1200 grayscale PIL Image.
 
 import hashlib
 import json
+import math
 import os
 import random
 import textwrap
@@ -1043,6 +1044,518 @@ def render_todo_list() -> Image.Image:
     return img
 
 
+# ── 15. Moon Phase ──────────────────────────────────────────────────
+
+def _moon_phase(dt):
+    """Calculate moon phase (0-29.53) using Conway's method.
+    0 = new moon, ~7.4 = first quarter, ~14.8 = full moon, ~22.1 = last quarter."""
+    year = dt.year
+    month = dt.month
+    day = dt.day
+    if month <= 2:
+        year -= 1
+        month += 12
+    a = year // 100
+    b = a // 4
+    c = 2 - a + b
+    e = int(365.25 * (year + 4716))
+    f = int(30.6001 * (month + 1))
+    jd = c + day + e + f - 1524.5
+    days_since_new = (jd - 2451550.1) % 29.530588853
+    return days_since_new
+
+
+def _draw_moon(draw, cx, cy, radius, phase_days):
+    """Draw a realistic moon at (cx, cy) with given radius and phase."""
+    # phase_days: 0=new, ~14.8=full
+    phase_pct = phase_days / 29.530588853  # 0 to 1
+
+    # Draw the dark circle (base)
+    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=40)
+
+    # Calculate illumination
+    # 0 = new (dark), 0.5 = full (bright), 1 = new again
+    if phase_pct <= 0.5:
+        illumination = phase_pct * 2  # 0 to 1 (waxing)
+    else:
+        illumination = (1 - phase_pct) * 2  # 1 to 0 (waning)
+
+    # Draw lit portion using vertical slices
+    for y_off in range(-radius, radius + 1):
+        # Width of the circle at this y
+        x_half = math.sqrt(max(0, radius * radius - y_off * y_off))
+        if x_half < 1:
+            continue
+
+        # Terminator x position
+        term_x = x_half * (2 * illumination - 1)
+
+        if phase_pct <= 0.5:
+            # Waxing: lit from right
+            x_start = int(cx + term_x)
+            x_end = int(cx + x_half)
+        else:
+            # Waning: lit from left
+            x_start = int(cx - x_half)
+            x_end = int(cx + term_x)
+
+        if x_end > x_start:
+            draw.line([(x_start, cy + y_off), (x_end, cy + y_off)], fill=230, width=1)
+
+
+def render_moon_phase() -> Image.Image:
+    """Display current moon phase with a beautiful drawn moon."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+    now = datetime.now()
+
+    phase_days = _moon_phase(now)
+    phase_pct = phase_days / 29.530588853
+
+    # Phase name
+    if phase_days < 1.85:
+        name = "New Moon"
+    elif phase_days < 5.53:
+        name = "Waxing Crescent"
+    elif phase_days < 9.22:
+        name = "First Quarter"
+    elif phase_days < 12.91:
+        name = "Waxing Gibbous"
+    elif phase_days < 16.61:
+        name = "Full Moon"
+    elif phase_days < 20.30:
+        name = "Waning Gibbous"
+    elif phase_days < 23.99:
+        name = "Last Quarter"
+    elif phase_days < 27.68:
+        name = "Waning Crescent"
+    else:
+        name = "New Moon"
+
+    illumination = abs(1 - 2 * phase_pct) if phase_pct > 0.5 else phase_pct * 2
+
+    # Draw the moon — large and centered
+    moon_r = 250
+    moon_cy = 420
+    _draw_moon(draw, WIDTH // 2, moon_cy, moon_r, phase_days)
+
+    # Add subtle crater circles for realism
+    craters = [(0.15, -0.3, 30), (-0.25, 0.1, 20), (0.1, 0.2, 25),
+               (-0.15, -0.15, 15), (0.3, 0.05, 18), (-0.05, 0.35, 22)]
+    for cx_f, cy_f, cr in craters:
+        ccx = int(WIDTH // 2 + cx_f * moon_r)
+        ccy = int(moon_cy + cy_f * moon_r)
+        # Only draw craters on lit portion
+        dist = math.sqrt(cx_f**2 + cy_f**2)
+        if dist < 0.85:
+            draw.ellipse([ccx - cr, ccy - cr, ccx + cr, ccy + cr], outline=200, width=1)
+
+    # Title
+    draw.text((WIDTH // 2, 80), "Moon Phase", fill=160, font=get_font(32), anchor="mm")
+
+    # Phase name — large
+    draw.text((WIDTH // 2, 760), name, fill=0, font=get_font(56, bold=True), anchor="mm")
+
+    # Illumination percentage
+    draw.text((WIDTH // 2, 830), f"{illumination * 100:.0f}% illuminated", fill=100, font=get_font(32), anchor="mm")
+
+    # Day in cycle
+    draw.text((WIDTH // 2, 880), f"Day {phase_days:.1f} of 29.5", fill=140, font=get_font(26), anchor="mm")
+
+    # Next full/new moon
+    if phase_days < 14.765:
+        days_to_full = 14.765 - phase_days
+        draw.text((WIDTH // 2, 940), f"Full moon in {days_to_full:.0f} days", fill=120, font=get_font(28), anchor="mm")
+    else:
+        days_to_new = 29.53 - phase_days
+        draw.text((WIDTH // 2, 940), f"New moon in {days_to_new:.0f} days", fill=120, font=get_font(28), anchor="mm")
+
+    _footer(draw, now.strftime("%A %d %B"))
+    return img
+
+
+# ── 16. Air Quality ─────────────────────────────────────────────────
+
+def render_air_quality() -> Image.Image:
+    """Display air quality index, pollen, and UV from Open-Meteo."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    def _fetch():
+        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        params = {
+            "latitude": WEATHER_LAT,
+            "longitude": WEATHER_LON,
+            "current": "european_aqi,us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone",
+            "hourly": "european_aqi,uv_index",
+            "forecast_days": 1,
+        }
+        r = requests.get(url, params=params, timeout=8)
+        r.raise_for_status()
+        return r.json()
+
+    data = _cache_fetch("air_quality", 600, 1800, _fetch)  # 10min TTL, 30min stale
+
+    # Header
+    draw.text((WIDTH // 2, 70), "Air Quality", fill=0, font=get_font(50, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 120), WEATHER_LOCATION, fill=140, font=get_font(28), anchor="mm")
+    draw.line([(PAD, 155), (WIDTH - PAD, 155)], fill=200, width=2)
+
+    if not data or "current" not in data:
+        draw.text((WIDTH // 2, HEIGHT // 2), "Could not load air quality data", fill=120, font=get_font(36), anchor="mm")
+        _footer(draw, now_str())
+        return img
+
+    current = data["current"]
+    eu_aqi = current.get("european_aqi", 0)
+    us_aqi = current.get("us_aqi", 0)
+    pm25 = current.get("pm2_5", 0)
+    pm10 = current.get("pm10", 0)
+    no2 = current.get("nitrogen_dioxide", 0)
+    o3 = current.get("ozone", 0)
+
+    # AQI category
+    if eu_aqi <= 20:
+        quality = "Good"
+        quality_fill = 60
+    elif eu_aqi <= 40:
+        quality = "Fair"
+        quality_fill = 60
+    elif eu_aqi <= 60:
+        quality = "Moderate"
+        quality_fill = 40
+    elif eu_aqi <= 80:
+        quality = "Poor"
+        quality_fill = 20
+    elif eu_aqi <= 100:
+        quality = "Very Poor"
+        quality_fill = 0
+    else:
+        quality = "Hazardous"
+        quality_fill = 0
+
+    # Big AQI display
+    draw.text((WIDTH // 2, 280), str(int(eu_aqi)), fill=quality_fill, font=get_font(140, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 370), f"European AQI — {quality}", fill=80, font=get_font(34), anchor="mm")
+    draw.text((WIDTH // 2, 415), f"US AQI: {int(us_aqi)}", fill=140, font=get_font(26), anchor="mm")
+
+    # AQI bar
+    bar_x = 200
+    bar_w = WIDTH - 400
+    bar_y = 460
+    bar_h = 30
+    draw.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], radius=bar_h // 2, fill=220)
+    fill_pct = min(eu_aqi / 100, 1.0)
+    fill_w = int(bar_w * fill_pct)
+    if fill_w > bar_h:
+        draw.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + bar_h], radius=bar_h // 2, fill=60)
+    # Scale labels
+    for label, pos in [("Good", 0.1), ("Fair", 0.3), ("Mod", 0.5), ("Poor", 0.7), ("V.Poor", 0.9)]:
+        lx = bar_x + int(bar_w * pos)
+        draw.text((lx, bar_y + bar_h + 15), label, fill=160, font=get_font(18), anchor="mt")
+
+    # Pollutant details — 2 columns
+    y = 560
+    col1_x = WIDTH // 4
+    col2_x = 3 * WIDTH // 4
+    items = [
+        ("PM2.5", f"{pm25:.1f} µg/m³", col1_x),
+        ("PM10", f"{pm10:.1f} µg/m³", col2_x),
+        ("NO₂", f"{no2:.1f} µg/m³", col1_x),
+        ("Ozone", f"{o3:.1f} µg/m³", col2_x),
+    ]
+    row = 0
+    for label, value, cx in items:
+        ry = y + (row // 2) * 90
+        draw.text((cx, ry), label, fill=0, font=get_font(30, bold=True), anchor="mm")
+        draw.text((cx, ry + 38), value, fill=80, font=get_font(26), anchor="mm")
+        row += 1
+
+    # UV index from hourly data
+    hourly = data.get("hourly", {})
+    uv_values = hourly.get("uv_index", [])
+    if uv_values:
+        max_uv = max(v for v in uv_values if v is not None) if any(v is not None for v in uv_values) else 0
+        uv_y = y + 200
+        draw.line([(PAD + 100, uv_y - 20), (WIDTH - PAD - 100, uv_y - 20)], fill=220, width=1)
+        draw.text((WIDTH // 2, uv_y + 20), f"UV Index: {max_uv:.0f} (today's peak)", fill=60, font=get_font(30), anchor="mm")
+        if max_uv <= 2:
+            uv_label = "Low"
+        elif max_uv <= 5:
+            uv_label = "Moderate"
+        elif max_uv <= 7:
+            uv_label = "High"
+        elif max_uv <= 10:
+            uv_label = "Very High"
+        else:
+            uv_label = "Extreme"
+        draw.text((WIDTH // 2, uv_y + 60), uv_label, fill=80, font=get_font(26, bold=True), anchor="mm")
+
+    _footer(draw, now_str())
+    return img
+
+
+# ── 17. Analogue Clock ──────────────────────────────────────────────
+
+def render_clock_face() -> Image.Image:
+    """Beautiful analogue clock face filling the 13\" display."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+    now = datetime.now()
+
+    cx, cy = WIDTH // 2, HEIGHT // 2 - 30
+    radius = 480  # large clock filling the display
+
+    # Outer ring
+    draw.ellipse([cx - radius - 8, cy - radius - 8, cx + radius + 8, cy + radius + 8], outline=30, width=6)
+    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], outline=60, width=3)
+
+    # Hour markers
+    for i in range(60):
+        angle = math.radians(i * 6 - 90)
+        if i % 5 == 0:
+            # Hour marker — thick line
+            inner = radius - 45
+            outer = radius - 10
+            w = 4
+        else:
+            # Minute marker — thin line
+            inner = radius - 20
+            outer = radius - 10
+            w = 1
+        x1 = cx + int(inner * math.cos(angle))
+        y1 = cy + int(inner * math.sin(angle))
+        x2 = cx + int(outer * math.cos(angle))
+        y2 = cy + int(outer * math.sin(angle))
+        draw.line([(x1, y1), (x2, y2)], fill=40, width=w)
+
+    # Hour numbers
+    for h in range(1, 13):
+        angle = math.radians(h * 30 - 90)
+        nx = cx + int((radius - 75) * math.cos(angle))
+        ny = cy + int((radius - 75) * math.sin(angle))
+        draw.text((nx, ny), str(h), fill=20, font=get_font(48, bold=True), anchor="mm")
+
+    # Date window at 3 o'clock position
+    date_x = cx + int(radius * 0.55)
+    date_y = cy
+    dw, dh = 60, 36
+    draw.rectangle([date_x - dw // 2, date_y - dh // 2, date_x + dw // 2, date_y + dh // 2],
+                    outline=140, width=1, fill=245)
+    draw.text((date_x, date_y), str(now.day), fill=0, font=get_font(24, bold=True), anchor="mm")
+
+    # Calculate hand angles
+    hour = now.hour % 12
+    minute = now.minute
+    second = now.second
+
+    hour_angle = math.radians((hour + minute / 60) * 30 - 90)
+    min_angle = math.radians((minute + second / 60) * 6 - 90)
+    sec_angle = math.radians(second * 6 - 90)
+
+    # Hour hand — short and thick
+    hour_len = radius * 0.55
+    hx = cx + int(hour_len * math.cos(hour_angle))
+    hy = cy + int(hour_len * math.sin(hour_angle))
+    # Draw thick hand with a polygon
+    perp = hour_angle + math.pi / 2
+    hw = 10  # half-width
+    points = [
+        (cx + int(hw * math.cos(perp)), cy + int(hw * math.sin(perp))),
+        (hx + int(3 * math.cos(perp)), hy + int(3 * math.sin(perp))),
+        (hx - int(3 * math.cos(perp)), hy - int(3 * math.sin(perp))),
+        (cx - int(hw * math.cos(perp)), cy - int(hw * math.sin(perp))),
+    ]
+    draw.polygon(points, fill=20)
+
+    # Minute hand — long and medium
+    min_len = radius * 0.8
+    mx = cx + int(min_len * math.cos(min_angle))
+    my = cy + int(min_len * math.sin(min_angle))
+    perp = min_angle + math.pi / 2
+    mw = 6
+    points = [
+        (cx + int(mw * math.cos(perp)), cy + int(mw * math.sin(perp))),
+        (mx + int(2 * math.cos(perp)), my + int(2 * math.sin(perp))),
+        (mx - int(2 * math.cos(perp)), my - int(2 * math.sin(perp))),
+        (cx - int(mw * math.cos(perp)), cy - int(mw * math.sin(perp))),
+    ]
+    draw.polygon(points, fill=30)
+
+    # Second hand — thin and long
+    sec_len = radius * 0.85
+    sx = cx + int(sec_len * math.cos(sec_angle))
+    sy = cy + int(sec_len * math.sin(sec_angle))
+    # Counterweight
+    tail_len = radius * 0.15
+    tx = cx - int(tail_len * math.cos(sec_angle))
+    ty = cy - int(tail_len * math.sin(sec_angle))
+    draw.line([(tx, ty), (sx, sy)], fill=60, width=2)
+
+    # Center cap
+    draw.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=20)
+    draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=60)
+
+    # Branding
+    draw.text((cx, cy + radius * 0.3), "JOAN", fill=160, font=get_font(22, bold=True), anchor="mm")
+
+    # Digital time below clock
+    draw.text((WIDTH // 2, HEIGHT - 50), now.strftime("%H:%M:%S"), fill=140, font=get_font(30), anchor="mm")
+
+    return img
+
+
+# ── 18. Upcoming Movies ────────────────────────────────────────────
+
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
+
+
+def render_upcoming_movies() -> Image.Image:
+    """Display upcoming movies from The Movie Database (TMDB)."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    def _fetch():
+        if not TMDB_API_KEY:
+            # Use the discover endpoint with no auth for trending (v3 needs key)
+            raise ValueError("Set TMDB_API_KEY env var (free at themoviedb.org)")
+        url = "https://api.themoviedb.org/3/movie/upcoming"
+        params = {"api_key": TMDB_API_KEY, "language": "en-GB", "region": "GB", "page": 1}
+        r = requests.get(url, params=params, timeout=8)
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        if not results:
+            raise ValueError("No upcoming movies")
+        return results[:6]
+
+    movies = _cache_fetch("movies", 3600, 21600, _fetch)  # 1h TTL, 6h stale
+
+    # Header
+    draw.text((WIDTH // 2, 70), "Upcoming Movies", fill=0, font=get_font(50, bold=True), anchor="mm")
+    draw.text((WIDTH // 2, 120), "In Cinemas Soon", fill=140, font=get_font(26), anchor="mm")
+    draw.line([(PAD, 150), (WIDTH - PAD, 150)], fill=200, width=2)
+
+    if not movies:
+        msg = "Set TMDB_API_KEY for movie listings" if not TMDB_API_KEY else "Could not load movies"
+        draw.text((WIDTH // 2, HEIGHT // 2 - 20), msg, fill=120, font=get_font(30), anchor="mm")
+        if not TMDB_API_KEY:
+            draw.text((WIDTH // 2, HEIGHT // 2 + 30), "Free key at themoviedb.org", fill=160, font=get_font(24), anchor="mm")
+        _footer(draw, now_str())
+        return img
+
+    # Try to load poster for the first movie
+    poster_loaded = False
+    first = movies[0]
+    poster_path = first.get("poster_path", "")
+    if poster_path:
+        try:
+            poster_url = f"https://image.tmdb.org/t/p/w342{poster_path}"
+            r = requests.get(poster_url, timeout=10)
+            if r.status_code == 200:
+                poster = Image.open(BytesIO(r.content)).convert("L")
+                # Scale poster to fit left side
+                pw, ph = poster.size
+                target_h = 500
+                scale = target_h / ph
+                poster = poster.resize((int(pw * scale), target_h), Image.LANCZOS)
+                from PIL import ImageOps
+                poster = ImageOps.autocontrast(poster, cutoff=2)
+                img.paste(poster, (PAD + 20, 180))
+                poster_loaded = True
+                poster_w = int(pw * scale)
+        except Exception as e:
+            print(f"[movies] Poster failed: {e}")
+
+    # First movie details
+    text_x = PAD + poster_w + 40 if poster_loaded else PAD + 40
+    text_max = WIDTH - text_x - PAD
+
+    title = first.get("title", "Untitled")
+    release = first.get("release_date", "")
+    overview = first.get("overview", "")
+    vote = first.get("vote_average", 0)
+
+    y = 190
+    # Title
+    y = _centered_text(draw, y, title, size=38, bold=True, fill=0, max_width=text_max) if not poster_loaded else y
+    if poster_loaded:
+        font = get_font(38, bold=True)
+        words = title.split()
+        lines, line = [], ""
+        for w in words:
+            test = f"{line} {w}".strip()
+            if font.getlength(test) > text_max:
+                if line:
+                    lines.append(line)
+                line = w
+            else:
+                line = test
+        if line:
+            lines.append(line)
+        for ln in lines[:2]:
+            draw.text((text_x, y), ln, fill=0, font=font, anchor="lt")
+            y += 50
+
+    y += 10
+    if release:
+        try:
+            rd = datetime.strptime(release, "%Y-%m-%d")
+            draw.text((text_x if poster_loaded else PAD + 40, y), rd.strftime("%d %B %Y"), fill=80, font=get_font(28), anchor="lt")
+            y += 40
+        except ValueError:
+            pass
+
+    if vote:
+        draw.text((text_x if poster_loaded else PAD + 40, y), f"★ {vote:.1f}/10", fill=60, font=get_font(28, bold=True), anchor="lt")
+        y += 40
+
+    # Overview (short)
+    if overview:
+        y += 10
+        ox = text_x if poster_loaded else PAD + 40
+        o_max = text_max if poster_loaded else WIDTH - PAD * 2 - 40
+        font = get_font(24)
+        words = overview.split()
+        lines, line = [], ""
+        for w in words:
+            test = f"{line} {w}".strip()
+            if font.getlength(test) > o_max:
+                if line:
+                    lines.append(line)
+                line = w
+            else:
+                line = test
+        if line:
+            lines.append(line)
+        max_lines = 6 if poster_loaded else 4
+        for ln in lines[:max_lines]:
+            draw.text((ox, y), ln, fill=100, font=font, anchor="lt")
+            y += 30
+
+    # Other upcoming movies list
+    list_y = max(700, y + 20)
+    draw.line([(PAD, list_y - 10), (WIDTH - PAD, list_y - 10)], fill=200, width=1)
+    draw.text((PAD + 20, list_y + 5), "Also coming soon:", fill=140, font=get_font(24), anchor="lt")
+    list_y += 45
+
+    for m in movies[1:5]:
+        t = m.get("title", "")
+        rd = m.get("release_date", "")
+        date_str = ""
+        if rd:
+            try:
+                date_str = datetime.strptime(rd, "%Y-%m-%d").strftime("%d %b")
+            except ValueError:
+                pass
+        draw.text((PAD + 40, list_y), f"• {t[:50]}", fill=40, font=get_font(26), anchor="lt")
+        if date_str:
+            draw.text((WIDTH - PAD - 20, list_y), date_str, fill=140, font=get_font(22), anchor="rt")
+        list_y += 45
+
+    _footer(draw, now_str())
+    return img
+
+
 # ── Utility ──────────────────────────────────────────────────────────
 
 def now_str():
@@ -1066,4 +1579,8 @@ ALL_SCREENS = {
     "rss": render_rss_headlines,
     "stocks": render_stock_ticker,
     "todo": render_todo_list,
+    "moon": render_moon_phase,
+    "airquality": render_air_quality,
+    "clock": render_clock_face,
+    "movies": render_upcoming_movies,
 }
