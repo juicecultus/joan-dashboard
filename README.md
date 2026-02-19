@@ -27,7 +27,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Dad Joke** — random joke from [icanhazdadjoke](https://icanhazdadjoke.com/) API, new joke each rotation
 - **Year Progress** — visual progress bar showing day/percentage/quarter through the year
 - **Maths Challenge** — 8 random problems (addition, multiplication, fractions, percentages, squares) for the kids
-- **RSS Headlines** — latest headlines from any RSS feed (default: [The Verge](https://www.theverge.com/)), configurable via `RSS_FEED_URL`
+- **RSS Article** — full-screen single article view with hero image, title, and summary from any RSS feed (default: [The Verge](https://www.theverge.com/)), configurable via `RSS_FEED_URL`
 - **Stock Ticker** — live market prices and daily changes from [Yahoo Finance](https://finance.yahoo.com/), configurable tickers via `STOCK_TICKERS`
 - **Google Tasks Todo** — full-screen task list with checkboxes, pulled from all your Google Tasks lists
 - **Moon Phase** — drawn moon with illumination %, phase name, crater detail, and countdown to next full/new moon (pure calculation, no API)
