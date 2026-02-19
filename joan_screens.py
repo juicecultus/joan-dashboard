@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFilter
 # Reuse from main dashboard
 from joan_dashboard import (
     WIDTH, HEIGHT, get_font, fetch_weather, fetch_week_events,
-    WEATHER_LAT, WEATHER_LON, WEATHER_LOCATION,
+    WEATHER_LAT, WEATHER_LON, WEATHER_LOCATION, fetch_device_status,
 )
 
 PAD = 60  # generous padding for full-screen layouts
@@ -79,10 +79,23 @@ def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 12
     return y
 
 
+def _dashboard_footer(draw):
+    """Match the main dashboard footer: location + update time + room/battery."""
+    footer_left = f"{WEATHER_LOCATION}  ·  Updated {datetime.now().strftime('%H:%M')}"
+    draw.text((PAD, HEIGHT - 28), footer_left, fill=160, font=get_font(26), anchor="lm")
+    dev = fetch_device_status()
+    footer_parts = []
+    if dev.get("temperature"):
+        footer_parts.append(f"Room {dev['temperature']}°C")
+    if dev.get("battery"):
+        footer_parts.append(f"Batt {dev['battery']}%")
+    if footer_parts:
+        draw.text((WIDTH - PAD, HEIGHT - 28), "  ·  ".join(footer_parts), fill=160, font=get_font(26), anchor="rm")
+
+
 def _footer(draw, text=""):
-    """Draw a subtle footer at the bottom."""
-    if text:
-        draw.text((WIDTH // 2, HEIGHT - 36), text, fill=160, font=get_font(22), anchor="mm")
+    """Legacy footer wrapper; now matches dashboard footer style."""
+    _dashboard_footer(draw)
 
 
 # ── 1. Daily Agenda ──────────────────────────────────────────────────
@@ -159,12 +172,33 @@ def render_quote() -> Image.Image:
     draw.text((PAD + 20, 200), "\u201c", fill=200, font=get_font(200), anchor="lt")
 
     # Quote text — centered
-    y = _centered_text(draw, 350, quote_text, size=52, fill=20, max_width=WIDTH - 200)
+    quote_font = get_font(78)
+    quote_lines = []
+    for paragraph in quote_text.split("\n"):
+        words = paragraph.split()
+        line = ""
+        for word in words:
+            test = f"{line} {word}".strip()
+            if quote_font.getlength(test) > WIDTH - 200:
+                if line:
+                    quote_lines.append(line)
+                line = word
+            else:
+                line = test
+        if line:
+            quote_lines.append(line)
+    line_h = int(78 * 1.4)
+    block_h = line_h * len(quote_lines)
+    start_y = max(280, (HEIGHT - block_h) // 2 - 40)
+    y = start_y
+    for line in quote_lines:
+        draw.text((WIDTH // 2, y), line, fill=20, font=quote_font, anchor="mt")
+        y += line_h
 
     # Author
-    draw.text((WIDTH // 2, y + 40), f"— {author}", fill=100, font=get_font(36, bold=True), anchor="mt")
+    draw.text((WIDTH // 2, y + 40), f"— {author}", fill=100, font=get_font(48, bold=True), anchor="mt")
 
-    _footer(draw, now_str())
+    _dashboard_footer(draw)
     return img
 
 
@@ -370,16 +404,34 @@ def render_word_of_day() -> Image.Image:
         draw.text((WIDTH // 2, y), part_of_speech.lower(), fill=100, font=get_font(30, bold=True), anchor="mt")
         y += 50
 
-    # Definition
+    # Definition + example (larger + vertically centered block)
     draw.line([(PAD + 100, y), (WIDTH - PAD - 100, y)], fill=200, width=1)
     y += 30
-    if definition:
-        y = _centered_text(draw, y, definition, size=38, fill=30, max_width=WIDTH - 200)
 
-    # Example sentence
-    if example:
-        y += 30
-        y = _centered_text(draw, y, f'"{example}"', size=30, fill=100, max_width=WIDTH - 240)
+    def_font = get_font(57)
+    ex_font = get_font(45)
+    max_def_w = WIDTH - 200
+    max_ex_w = WIDTH - 240
+
+    def_lines = _wrap_text(def_font, definition, max_def_w) if definition else []
+    ex_lines = _wrap_text(ex_font, f'"{example}"', max_ex_w) if example else []
+
+    def_h = int(57 * 1.35) * len(def_lines)
+    ex_h = int(45 * 1.35) * len(ex_lines)
+    total_h = def_h + (40 if def_lines and ex_lines else 0) + ex_h
+    content_top = y
+    content_bottom = HEIGHT - 120
+    y = content_top + max(0, (content_bottom - content_top - total_h) // 2)
+
+    for ln in def_lines:
+        draw.text((WIDTH // 2, y), ln, fill=30, font=def_font, anchor="mt")
+        y += int(57 * 1.35)
+
+    if ex_lines:
+        y += 40
+        for ln in ex_lines:
+            draw.text((WIDTH // 2, y), ln, fill=100, font=ex_font, anchor="mt")
+            y += int(45 * 1.35)
 
     _footer(draw, now_str())
     return img
@@ -406,7 +458,7 @@ def render_this_day_in_history() -> Image.Image:
 
     # Header
     draw.text((WIDTH // 2, 60), "On This Day", fill=0, font=get_font(60, bold=True), anchor="mt")
-    draw.text((WIDTH // 2, 135), now.strftime("%d %B"), fill=80, font=get_font(36), anchor="mt")
+    draw.text((WIDTH // 2, 135), now.strftime("%d %B"), fill=80, font=get_font(48), anchor="mt")
     draw.line([(PAD, 185), (WIDTH - PAD, 185)], fill=180, width=2)
 
     if not events:
@@ -419,7 +471,7 @@ def render_this_day_in_history() -> Image.Image:
     step = max(1, len(events) // 4)
     selected = events[::step][:4]
 
-    y = 220
+    y = 230
     for ev in selected:
         if y > HEIGHT - 120:
             break
@@ -429,10 +481,10 @@ def render_this_day_in_history() -> Image.Image:
             continue
 
         # Year
-        draw.text((PAD + 20, y), str(year), fill=0, font=get_font(40, bold=True), anchor="lt")
+        draw.text((PAD + 20, y), str(year), fill=0, font=get_font(60, bold=True), anchor="lt")
 
         # Event text (wrapped)
-        font = get_font(30)
+        font = get_font(45)
         max_w = WIDTH - PAD - 240
         words = text.split()
         lines = []
@@ -449,10 +501,10 @@ def render_this_day_in_history() -> Image.Image:
             lines.append(line)
 
         tx = PAD + 200
-        for ln in lines[:4]:  # max 4 lines per event
+        for ln in lines[:3]:  # fewer lines with larger font
             draw.text((tx, y), ln, fill=40, font=font, anchor="lt")
-            y += 38
-        y += 30
+            y += 54
+        y += 24
 
         # Divider
         draw.line([(PAD + 100, y - 15), (WIDTH - PAD - 100, y - 15)], fill=220, width=1)
@@ -608,11 +660,7 @@ def render_weather_radar() -> Image.Image:
                 px = img.getpixel((x, y))
                 img.putpixel((x, y), min(255, px + 80))
         draw.text((WIDTH // 2, 30), f"Weather Radar — {WEATHER_LOCATION}", fill=0, font=get_font(30, bold=True), anchor="mm")
-        for y in range(HEIGHT - 50, HEIGHT):
-            for x in range(WIDTH):
-                px = img.getpixel((x, y))
-                img.putpixel((x, y), min(255, px + 80))
-        draw.text((WIDTH // 2, HEIGHT - 25), now_str(), fill=60, font=get_font(22), anchor="mm")
+        _dashboard_footer(draw)
     else:
         draw.text((WIDTH // 2, HEIGHT // 2 - 20), "Weather Radar", fill=0, font=get_font(50, bold=True), anchor="mm")
         draw.text((WIDTH // 2, HEIGHT // 2 + 40), "Could not load radar data", fill=120, font=get_font(30), anchor="mm")
@@ -637,14 +685,34 @@ def render_dad_joke() -> Image.Image:
     joke = result or "I told my wife she was drawing her eyebrows too high. She looked surprised."
 
     # Title
-    draw.text((WIDTH // 2, 120), "Dad Joke", fill=160, font=get_font(36), anchor="mm")
+    draw.text((WIDTH // 2, 120), "Dad Joke", fill=160, font=get_font(48), anchor="mm")
 
     # Draw a small divider
     div_w = 200
     draw.line([(WIDTH // 2 - div_w // 2, 160), (WIDTH // 2 + div_w // 2, 160)], fill=180, width=2)
 
-    # Joke text — large and centered
-    y = _centered_text(draw, 240, joke, size=52, bold=False, fill=20, max_width=WIDTH - 200)
+    # Joke text — larger and vertically centered
+    joke_font = get_font(78)
+    words = joke.split()
+    lines = []
+    line = ""
+    for word in words:
+        test = f"{line} {word}".strip()
+        if joke_font.getlength(test) > WIDTH - 200:
+            if line:
+                lines.append(line)
+            line = word
+        else:
+            line = test
+    if line:
+        lines.append(line)
+    line_h = int(78 * 1.35)
+    block_h = line_h * len(lines)
+    start_y = max(240, (HEIGHT - block_h) // 2 - 40)
+    y = start_y
+    for ln in lines:
+        draw.text((WIDTH // 2, y), ln, fill=20, font=joke_font, anchor="mt")
+        y += line_h
 
     # Emoji-style decoration at bottom
     draw.text((WIDTH // 2, HEIGHT - 100), "😄", fill=160, font=get_font(60), anchor="mm")
@@ -889,6 +957,10 @@ def render_rss_headlines() -> Image.Image:
         _footer(draw, now_str())
         return img
 
+    day_seed = int(datetime.now().strftime("%Y%m%d"))
+    day_rng = random.Random(day_seed)
+    entries = entries[:12]
+    day_rng.shuffle(entries)
     slot = int(time.time() // 1800)  # rotate article every 30 minutes
     entry = entries[slot % len(entries)]
 
