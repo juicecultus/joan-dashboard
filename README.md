@@ -15,7 +15,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Room temperature** — from the Joan's built-in LM75 sensor (via VSS API)
 - **Battery level** — live device battery percentage from VSS
 
-### Playlist Screens (18 rotating screens)
+### Playlist Screens (19 rotating screens)
 - **Daily Agenda** — large-font view of today's events, readable across the room
 - **Motivational Quote** — daily quote from [ZenQuotes](https://zenquotes.io/) API
 - **Countdown** — days until your next calendar events ("School breaks up — Tomorrow")
@@ -34,6 +34,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Air Quality** — European/US AQI, PM2.5, PM10, NO₂, Ozone, UV Index from [Open-Meteo](https://open-meteo.com/en/docs/air-quality-api) (free, no API key)
 - **Analogue Clock** — beautiful clock face with hour/minute/second hands, date window, 60 tick marks, filling the full 13" display
 - **Upcoming Movies** — featured movie with poster, rating, synopsis + "also coming soon" list from [TMDB](https://www.themoviedb.org/) (free API key required via `TMDB_API_KEY`)
+- **Kid Learning Card** — rotating educational cards: spelling bee, times tables, world capitals quiz, and general knowledge questions with hidden answers
 
 ### System
 - **Playlist rotation** — configurable screen order and interval
