@@ -1,6 +1,6 @@
 # Joan Dashboard
 
-A custom dashboard and **playlist rotation system** for **Joan 13" e-ink displays** — weather, calendar, tasks, art, quotes, and more, rendered as grayscale images and pushed via the [Visionect Software Suite (VSS)](https://docs.visionect.com/).
+A custom dashboard and **playlist rotation system** for **Joan e-ink displays** (13", 6", and any Visionect-compatible size) — weather, calendar, tasks, art, quotes, and more, rendered as grayscale images and pushed via the [Visionect Software Suite (VSS)](https://docs.visionect.com/).
 
 ![Dashboard Preview](docs/preview.png)
 
@@ -37,6 +37,7 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 - **Kid Learning Card** — rotating educational cards: spelling bee, times tables, world capitals quiz, and general knowledge questions with hidden answers
 
 ### System
+- **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders once at 1600×1200, then LANCZOS-resizes and pushes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
 - **Playlist rotation** — configurable screen order and interval
 - **Smart caching** — fresh-first with stale fallback; shared calendar/tasks data across screens, per-screen TTLs (2min–12h), resilient to API outages
 - **Active hours** — only refreshes during configurable hours (default: 07:00–21:00); displays a beautiful night sky sleep screen (crescent moon, stars, Zzz) overnight
@@ -49,15 +50,16 @@ A custom dashboard and **playlist rotation system** for **Joan 13" e-ink display
 Joan devices are thin clients. They don't run apps — instead, they periodically poll a **Visionect Software Suite (VSS)** server for a pre-rendered image. This project:
 
 1. Fetches weather, calendar events, and tasks from APIs
-2. Renders a 1600×1200 grayscale PNG using Python Pillow
-3. Pushes the image to VSS via its HTTP API
-4. The Joan device picks it up on its next poll cycle
+2. Renders a 1600×1200 grayscale PNG using Python Pillow (reference canvas)
+3. Auto-discovers all configured devices and their native resolutions from VSS
+4. LANCZOS-resizes and pushes to each device via the VSS HTTP API
+5. Each Joan device picks up its correctly-sized image on the next poll cycle
 
 ## Prerequisites
 
 | Requirement | Notes |
 |---|---|
-| **Joan 13" device** | Any Joan / Visionect Place & Play e-ink display |
+| **Joan device** | Any Joan / Visionect Place & Play e-ink display (13", 6", etc.) |
 | **Raspberry Pi** (or any Linux host) | To run VSS + this dashboard |
 | **Docker & Docker Compose** | For the Visionect Software Suite |
 | **Micro-USB cable** | To connect Joan's FTDI serial console for server redirect (one-time) |
@@ -212,13 +214,13 @@ Edit `.env` with your values:
 
 ```env
 VSS_HOST=192.168.1.100       # IP of your VSS server
-DEVICE_UUID=your-uuid-here   # Find in VSS web UI → Devices
+DEVICE_UUIDS=uuid1,uuid2     # Comma-separated UUIDs (find in VSS web UI → Devices)
 WEATHER_LAT=51.509            # Your latitude
 WEATHER_LON=-0.118            # Your longitude
 WEATHER_LOCATION=London       # Display name
 ```
 
-**Finding your Device UUID:** Open the VSS web UI at `http://<VSS_HOST>:8081`, go to Devices, and copy the UUID of your Joan device.
+**Finding your Device UUIDs:** Open the VSS web UI at `http://<VSS_HOST>:8081`, go to Devices, and copy the UUID of each Joan device. Separate multiple UUIDs with commas. If you have only one device, `DEVICE_UUID=...` (singular) also works.
 
 ### 3. Set up Google Calendar & Tasks
 
@@ -335,6 +337,7 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `airquality` | AQI, pollutants, UV index | Open-Meteo Air Quality API |
 | `clock` | Analogue clock face | System time |
 | `movies` | Upcoming cinema releases | TMDB API (key required) |
+| `learning` | Kid learning cards (spelling, times tables, capitals, quiz) | Generated locally |
 
 ## Running as a Service
 
@@ -376,7 +379,7 @@ Since VSS is on the same Pi, set the host to localhost:
 ```env
 VSS_HOST=127.0.0.1
 VSS_PORT=8081
-DEVICE_UUID=your-uuid-here
+DEVICE_UUIDS=uuid1,uuid2     # comma-separated; all allowed devices if omitted
 WEATHER_LAT=51.509
 WEATHER_LON=-0.118
 WEATHER_LOCATION=London
@@ -508,7 +511,7 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 |---|---|
 | "Weather unavailable" | Check your internet connection. Open-Meteo is free and has no API key, so it should just work. |
 | No calendar events | Run `python joan_google_auth.py` to re-authenticate. Check that Calendar API is enabled in Google Cloud Console. |
-| Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUID` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. |
+| Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUIDS` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. Ensure the device is "Allowed" in VSS. |
 | Fonts look wrong | Install `fonts-dejavu` on Linux (`sudo apt install fonts-dejavu`). On macOS, Helvetica is used by default. |
 | Token expired | Delete `token.json` and re-run `python joan_google_auth.py`. |
 | Service won't start on Pi | Check logs with `journalctl -u joan-dashboard -e`. Ensure `.venv` exists and deps are installed. |
