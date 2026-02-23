@@ -35,7 +35,9 @@ if os.path.exists(_env_path):
 # --- Configuration (override via environment variables or .env file) ---
 VSS_HOST = os.environ.get("VSS_HOST", "192.168.6.6")
 VSS_PORT = int(os.environ.get("VSS_PORT", "8081"))
-DEVICE_UUID = os.environ.get("DEVICE_UUID", "")
+# Devices: comma-separated UUIDs, or single UUID (backward compat)
+_DEVICE_UUIDS_RAW = os.environ.get("DEVICE_UUIDS", os.environ.get("DEVICE_UUID", ""))
+DEVICE_UUID = _DEVICE_UUIDS_RAW.split(",")[0].strip() if _DEVICE_UUIDS_RAW else ""
 VSS_USER = os.environ.get("VSS_USER", "admin")
 VSS_PASS = os.environ.get("VSS_PASS", "visionect1")
 
@@ -641,25 +643,96 @@ def get_session(base_url: str) -> requests.Session:
     return s
 
 
-def push_image(img: Image.Image):
-    """Push a PIL Image to the Joan device via VSS HTTP backend."""
+def discover_devices() -> list:
+    """Auto-discover allowed devices from VSS with their native resolutions.
+
+    If DEVICE_UUIDS is set, only those UUIDs are included.
+    If no UUIDs are configured, all allowed devices are included.
+    Falls back to configured UUIDs at canvas resolution on failure.
+    """
+    devices = []
+    try:
+        base_url = f"http://{VSS_HOST}:{VSS_PORT}"
+        s = get_session(base_url)
+        r = s.get(f"{base_url}/api/device/", timeout=5)
+        if r.status_code == 200:
+            configured = [u.strip() for u in _DEVICE_UUIDS_RAW.split(",") if u.strip()]
+            for d in r.json():
+                if d.get("Options", {}).get("Allowed") != "true":
+                    continue
+                uuid = d["Uuid"]
+                if configured and uuid not in configured:
+                    continue
+                displays = d.get("Displays", [])
+                w = displays[0]["Width"] if displays else WIDTH
+                h = displays[0]["Height"] if displays else HEIGHT
+                name = d.get("Options", {}).get("Revision", uuid[:12])
+                devices.append({"uuid": uuid, "name": name, "width": w, "height": h})
+    except Exception as e:
+        print(f"[discover] VSS query failed: {e}")
+        # Fallback: use configured UUIDs at canvas resolution
+        for u in [u.strip() for u in _DEVICE_UUIDS_RAW.split(",") if u.strip()]:
+            devices.append({"uuid": u, "name": u[:12], "width": WIDTH, "height": HEIGHT})
+    return devices
+
+
+_discovered_devices = None
+
+
+def _get_devices() -> list:
+    """Return cached list of target devices (discovered on first call)."""
+    global _discovered_devices
+    if _discovered_devices is None:
+        _discovered_devices = discover_devices()
+    return _discovered_devices
+
+
+def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = None):
+    """Push a PIL Image to a Joan device via VSS HTTP backend.
+
+    If target_size differs from the image dimensions, the image is
+    LANCZOS-resized to the device's native resolution before pushing.
+    """
+    uuid = device_uuid or DEVICE_UUID
+    if not uuid:
+        print("[push] No device UUID configured")
+        return
+
+    # Resize to device native resolution if different from canvas
+    out = img
+    if target_size and (img.width, img.height) != target_size:
+        out = img.resize(target_size, Image.LANCZOS)
+
     base_url = f"http://{VSS_HOST}:{VSS_PORT}"
     session = get_session(base_url)
 
     # Convert to RGB PNG (VSS requires no alpha)
-    rgb = img.convert("RGB")
+    rgb = out.convert("RGB")
     buf = io.BytesIO()
     rgb.save(buf, format="PNG")
     buf.seek(0)
 
     r = session.put(
-        f"{base_url}/backend/{DEVICE_UUID}",
+        f"{base_url}/backend/{uuid}",
         files=[("image", ("dashboard.png", buf, "image/png"))],
     )
     if r.status_code == 200:
-        print(f"[push] Image pushed ({buf.tell()} bytes)")
+        print(f"[push] -> {uuid[:12]}... {out.width}x{out.height} ({buf.tell()} bytes)")
     else:
-        print(f"[push] Failed: {r.status_code} {r.text}")
+        print(f"[push] x {uuid[:12]}...: {r.status_code} {r.text}")
+
+
+def push_to_all(img: Image.Image):
+    """Push image to every configured device, resizing to each native resolution."""
+    devices = _get_devices()
+    if not devices:
+        if DEVICE_UUID:
+            push_image(img, DEVICE_UUID)
+        else:
+            print("[push] No devices configured")
+        return
+    for dev in devices:
+        push_image(img, dev["uuid"], (dev["width"], dev["height"]))
 
 
 # --- Main ---
@@ -688,7 +761,7 @@ def main():
             img.save(path)
             print(f"[preview] Saved to {path}")
         else:
-            push_image(img)
+            push_to_all(img)
         return
 
     # Playlist mode
@@ -717,7 +790,10 @@ def main():
         except (ValueError, IndexError):
             active_start, active_end = 7 * 60, 21 * 60  # default 07:00-21:00
 
+        devices = _get_devices()
+        dev_info = ", ".join(f"{d['name']} {d['width']}x{d['height']}" for d in devices) or "none found"
         print(f"[playlist] Rotating {len(screens)} screens, {interval}s each, active {args.active_hours}: {[s[0] for s in screens]}")
+        print(f"[devices] Pushing to {len(devices)} device(s): {dev_info}")
 
         while True:
             now_mins = datetime.now().hour * 60 + datetime.now().minute
@@ -733,7 +809,7 @@ def main():
                     from joan_screens import render_sleep_screen
                     wake_str = f"{active_start // 60:02d}:{active_start % 60:02d}"
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Pushing sleep screen")
-                    push_image(render_sleep_screen(wake_time=wake_str))
+                    push_to_all(render_sleep_screen(wake_time=wake_str))
                 except Exception as e:
                     print(f"[sleep] Failed to render sleep screen: {e}")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
@@ -748,7 +824,7 @@ def main():
                 try:
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name}")
                     img = render_fn()
-                    push_image(img)
+                    push_to_all(img)
                 except Exception as e:
                     print(f"[{name}] Error: {e}")
                 print(f"[playlist] Next screen in {interval}s")
@@ -766,7 +842,7 @@ def main():
             print(f"[preview] Saved to {path}")
             return
 
-        push_image(img)
+        push_to_all(img)
 
         if args.loop <= 0:
             break
