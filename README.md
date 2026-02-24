@@ -37,7 +37,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Kid Learning Card** — rotating educational cards: spelling bee, times tables, world capitals quiz, and general knowledge questions with hidden answers
 
 ### System
-- **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders once at 1600×1200, then LANCZOS-resizes and pushes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
+- **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
 - **Playlist rotation** — configurable screen order and interval
 - **Smart caching** — fresh-first with stale fallback; shared calendar/tasks data across screens, per-screen TTLs (2min–12h), resilient to API outages
 - **Active hours** — only refreshes during configurable hours (default: 07:00–21:00); displays a beautiful night sky sleep screen (crescent moon, stars, Zzz) overnight

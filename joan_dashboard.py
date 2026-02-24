@@ -607,10 +607,18 @@ def render_dashboard() -> Image.Image:
 
 
 # --- VSS communication ---
+_active_device_uuid = None  # set per-device before rendering for correct footer
+
+
 def fetch_device_status() -> dict:
-    """Fetch battery and temperature from the VSS device API."""
+    """Fetch battery and temperature from the VSS device API.
+
+    Uses _active_device_uuid when set (multi-device rendering),
+    otherwise falls back to DEVICE_UUID (first configured device).
+    """
     result = {"battery": None, "temperature": None}
-    if not DEVICE_UUID:
+    uuid = _active_device_uuid or DEVICE_UUID
+    if not uuid:
         return result
     try:
         base_url = f"http://{VSS_HOST}:{VSS_PORT}"
@@ -621,7 +629,7 @@ def fetch_device_status() -> dict:
             status = None
             if isinstance(data, list):
                 for d in data:
-                    if d.get("Uuid") == DEVICE_UUID:
+                    if d.get("Uuid") == uuid:
                         status = d.get("Status", {})
                         break
             elif isinstance(data, dict):
@@ -723,7 +731,7 @@ def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = N
 
 
 def push_to_all(img: Image.Image):
-    """Push image to every configured device, resizing to each native resolution."""
+    """Push a pre-rendered image to every configured device."""
     devices = _get_devices()
     if not devices:
         if DEVICE_UUID:
@@ -733,6 +741,30 @@ def push_to_all(img: Image.Image):
         return
     for dev in devices:
         push_image(img, dev["uuid"], (dev["width"], dev["height"]))
+
+
+def render_and_push_all(render_fn):
+    """Render per-device (for device-specific footer) and push to all.
+
+    Sets _active_device_uuid before each render so fetch_device_status()
+    returns the correct battery/temperature for each device's footer.
+    """
+    global _active_device_uuid
+    devices = _get_devices()
+    if not devices:
+        if DEVICE_UUID:
+            _active_device_uuid = DEVICE_UUID
+            img = render_fn()
+            push_image(img, DEVICE_UUID)
+        else:
+            print("[push] No devices configured")
+        _active_device_uuid = None
+        return
+    for dev in devices:
+        _active_device_uuid = dev["uuid"]
+        img = render_fn()
+        push_image(img, dev["uuid"], (dev["width"], dev["height"]))
+    _active_device_uuid = None
 
 
 # --- Main ---
@@ -755,13 +787,13 @@ def main():
             print(f"[error] Unknown screen '{args.screen}'. Available: {', '.join(ALL_SCREENS.keys())}")
             return
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering screen: {args.screen}")
-        img = ALL_SCREENS[args.screen]()
         if args.preview:
+            img = ALL_SCREENS[args.screen]()
             path = f"joan_preview_{args.screen}.png"
             img.save(path)
             print(f"[preview] Saved to {path}")
         else:
-            push_to_all(img)
+            render_and_push_all(ALL_SCREENS[args.screen])
         return
 
     # Playlist mode
@@ -809,7 +841,7 @@ def main():
                     from joan_screens import render_sleep_screen
                     wake_str = f"{active_start // 60:02d}:{active_start % 60:02d}"
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Pushing sleep screen")
-                    push_to_all(render_sleep_screen(wake_time=wake_str))
+                    render_and_push_all(lambda: render_sleep_screen(wake_time=wake_str))
                 except Exception as e:
                     print(f"[sleep] Failed to render sleep screen: {e}")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
@@ -823,8 +855,7 @@ def main():
                     break
                 try:
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name}")
-                    img = render_fn()
-                    push_to_all(img)
+                    render_and_push_all(render_fn)
                 except Exception as e:
                     print(f"[{name}] Error: {e}")
                 print(f"[playlist] Next screen in {interval}s")
@@ -834,15 +865,15 @@ def main():
     # Default: dashboard only
     while True:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering dashboard...")
-        img = render_dashboard()
 
         if args.preview:
+            img = render_dashboard()
             path = "joan_preview.png"
             img.save(path)
             print(f"[preview] Saved to {path}")
             return
 
-        push_to_all(img)
+        render_and_push_all(render_dashboard)
 
         if args.loop <= 0:
             break
