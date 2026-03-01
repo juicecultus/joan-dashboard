@@ -35,10 +35,11 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Analogue Clock** — beautiful clock face with hour/minute/second hands, date window, 60 tick marks, filling the full 13" display
 - **Upcoming Movies** — featured movie with poster, rating, synopsis + "also coming soon" list from [TMDB](https://www.themoviedb.org/) (free API key required via `TMDB_API_KEY`)
 - **Kid Learning Card** — rotating educational cards: spelling bee, times tables, world capitals quiz, and general knowledge questions with hidden answers
+- **UK Train Departures** — live departure board showing scheduled time, expected arrival, platform, destination, and operator via [Rail Data Marketplace](https://raildata.org.uk/) (free API key required via `TRAINS_API_KEY`); configurable station and destination CRS codes
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
-- **Playlist rotation** — configurable screen order and interval
+- **Playlist rotation** — configurable screen order and interval, either via CLI or the built-in **web playlist manager** (`joan_playlist_manager.py`)
 - **Smart caching** — fresh-first with stale fallback; shared calendar/tasks data across screens, per-screen TTLs (2min–12h), resilient to API outages
 - **Active hours** — only refreshes during configurable hours (default: 07:00–21:00); displays a beautiful night sky sleep screen (crescent moon, stars, Zzz) overnight
 - **Auto-refresh** — configurable loop interval (default: 180 seconds per screen, matching Joan's 3-min heartbeat)
@@ -338,12 +339,35 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `clock` | Analogue clock face | System time |
 | `movies` | Upcoming cinema releases | TMDB API (key required) |
 | `learning` | Kid learning cards (spelling, times tables, capitals, quiz) | Generated locally |
+| `trains` | UK train departure board | Rail Data Marketplace API (key required) |
+
+## Playlist Manager (Web UI)
+
+A built-in web app lets you toggle which screens rotate on your devices — no CLI changes or restarts needed.
+
+```bash
+python joan_playlist_manager.py              # starts on port 8080
+python joan_playlist_manager.py --port 9090  # custom port
+```
+
+Open `http://<host>:8080` in your browser, tick/untick screens, set the rotation interval, and hit **Save Playlist**. The dashboard reads the saved config live when started with:
+
+```bash
+python joan_dashboard.py --playlist=config --active-hours 07:00-21:00
+```
+
+Selections are saved to `playlist_config.json`. The dashboard reloads this file each rotation cycle, so changes take effect within one interval without restarting the service.
 
 ## Running as a Service
 
 ### Recommended: Raspberry Pi with systemd
 
 The best setup is running the dashboard loop on the **same Raspberry Pi** that hosts your VSS server. This way the display keeps updating even when your laptop is off, and the push happens over localhost with zero latency.
+
+> **Tip:** Run the playlist manager alongside the dashboard so you can toggle screens from your phone or laptop:
+> ```bash
+> python joan_playlist_manager.py &   # web UI on port 8080
+> ```
 
 #### 1. Set up the project on the Pi
 

@@ -13,6 +13,7 @@ First-time setup:
 import argparse
 import calendar
 import io
+import json
 import math
 import os
 import sys
@@ -48,6 +49,11 @@ HEIGHT = 1200
 WEATHER_LAT = float(os.environ.get("WEATHER_LAT", "51.845"))
 WEATHER_LON = float(os.environ.get("WEATHER_LON", "-0.943"))
 WEATHER_LOCATION = os.environ.get("WEATHER_LOCATION", "Waddesdon")
+
+# UK Trains: Rail Data Marketplace (Live Departure Board)
+TRAINS_API_KEY = os.environ.get("TRAINS_API_KEY", "")
+TRAINS_STATION = os.environ.get("TRAINS_STATION", "AVP")       # CRS code (Aylesbury Vale Parkway)
+TRAINS_DESTINATION = os.environ.get("TRAINS_DESTINATION", "MYB")  # CRS code (London Marylebone)
 
 # Google API token file (created by joan_google_auth.py)
 TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json")
@@ -799,21 +805,45 @@ def main():
     # Playlist mode
     if args.playlist:
         from joan_screens import ALL_SCREENS
-        screen_names = [s.strip() for s in args.playlist.split(",") if s.strip()]
-        screens = []
-        for name in screen_names:
-            if name == "dashboard":
-                screens.append(("dashboard", render_dashboard))
-            elif name in ALL_SCREENS:
-                screens.append((name, ALL_SCREENS[name]))
+
+        PLAYLIST_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "playlist_config.json")
+
+        def _load_playlist():
+            """Load screen list from config file or CLI arg. Re-read each cycle."""
+            names = []
+            cfg_interval = 180
+            if args.playlist == "config":
+                # Read from playlist_config.json (written by web UI)
+                if os.path.exists(PLAYLIST_CONFIG):
+                    try:
+                        with open(PLAYLIST_CONFIG, "r") as f:
+                            cfg = json.load(f)
+                        names = cfg.get("enabled", [])
+                        cfg_interval = cfg.get("interval", 180)
+                    except Exception as e:
+                        print(f"[playlist] Failed to read config: {e}")
+                if not names:
+                    print("[playlist] Config empty or missing, using all screens")
+                    names = ["dashboard"] + list(ALL_SCREENS.keys())
             else:
-                print(f"[warn] Unknown screen '{name}', skipping. Available: dashboard, {', '.join(ALL_SCREENS.keys())}")
+                names = [s.strip() for s in args.playlist.split(",") if s.strip()]
+            screens = []
+            for name in names:
+                if name == "dashboard":
+                    screens.append(("dashboard", render_dashboard))
+                elif name in ALL_SCREENS:
+                    screens.append((name, ALL_SCREENS[name]))
+                else:
+                    print(f"[warn] Unknown screen '{name}', skipping")
+            return screens, cfg_interval
+
+        screens, cfg_interval = _load_playlist()
 
         if not screens:
             print("[error] No valid screens in playlist")
             return
 
-        interval = max(args.loop, 180)  # minimum 180s — matches Joan 3-min heartbeat
+        interval = max(args.loop, cfg_interval) if args.loop else max(cfg_interval, 180)
         # Parse active hours
         try:
             start_str, end_str = args.active_hours.split("-")
@@ -828,6 +858,11 @@ def main():
         print(f"[devices] Pushing to {len(devices)} device(s): {dev_info}")
 
         while True:
+            # Reload config each cycle (web UI changes take effect live)
+            if args.playlist == "config":
+                screens, cfg_interval = _load_playlist()
+                interval = max(args.loop, cfg_interval) if args.loop else max(cfg_interval, 180)
+
             now_mins = datetime.now().hour * 60 + datetime.now().minute
             if now_mins < active_start or now_mins >= active_end:
                 wake_at = active_start if now_mins >= active_end else active_start

@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from joan_dashboard import (
     WIDTH, HEIGHT, get_font, fetch_weather, fetch_week_events,
     WEATHER_LAT, WEATHER_LON, WEATHER_LOCATION, fetch_device_status,
+    TRAINS_API_KEY, TRAINS_STATION, TRAINS_DESTINATION,
 )
 
 PAD = 60  # generous padding for full-screen layouts
@@ -1976,6 +1977,175 @@ def render_sleep_screen(wake_time="07:00") -> Image.Image:
     return img
 
 
+# ── UK Train Departures ──────────────────────────────────────────────
+
+# CRS code → human-readable station name (common stations)
+_CRS_NAMES = {
+    "AVP": "Aylesbury Vale Parkway",
+    "MYB": "London Marylebone",
+    "AYS": "Aylesbury",
+    "AMR": "Amersham",
+    "BCS": "Bicester North",
+    "HDM": "High Wycombe",
+    "BAN": "Banbury",
+    "KGX": "Kings Cross",
+    "PAD": "London Paddington",
+    "EUS": "London Euston",
+    "WAT": "London Waterloo",
+    "VXH": "Vauxhall",
+    "EDB": "Edinburgh Waverley",
+}
+
+
+def _fetch_trains():
+    """Fetch live departures from Rail Data Marketplace API."""
+    if not TRAINS_API_KEY:
+        return None
+    url = (
+        f"https://api1.raildata.org.uk/1010-live-departure-board-dep"
+        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}"
+    )
+    params = {"numRows": 10}
+    if TRAINS_DESTINATION:
+        params["filterCrs"] = TRAINS_DESTINATION
+        params["filterType"] = "to"
+    headers = {"x-apikey": TRAINS_API_KEY}
+    r = requests.get(url, params=params, headers=headers, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+def render_trains() -> Image.Image:
+    """Render a UK train departure board for e-ink display."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    station_name = _CRS_NAMES.get(TRAINS_STATION, TRAINS_STATION)
+    dest_name = _CRS_NAMES.get(TRAINS_DESTINATION, TRAINS_DESTINATION)
+
+    # Fetch departures (cached 2min, stale up to 30min)
+    data = _cache_fetch("trains", 120, 1800, _fetch_trains)
+
+    # --- Header bar ---
+    header_h = 90
+    draw.rectangle([0, 0, WIDTH, header_h], fill=30)
+    draw.text((PAD, header_h // 2), f"{station_name}  >  {dest_name}",
+              fill=240, font=get_font(42, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD, header_h // 2), f"Departures",
+              fill=200, font=get_font(34), anchor="rm")
+
+    # --- Column layout ---
+    col_num = PAD              # row number
+    col_time = 120
+    col_due = 360
+    col_plat = 580
+    col_dest = 740
+    col_oper = WIDTH - PAD
+    row_start = header_h + 20
+    row_h = 95
+
+    # Column headers
+    y = row_start
+    hdr_font = get_font(32, bold=True)
+    draw.text((col_time, y + 10), "Time", fill=40, font=hdr_font, anchor="lt")
+    draw.text((col_due, y + 10), "Due", fill=40, font=hdr_font, anchor="lt")
+    draw.text((col_plat, y + 10), "Platform", fill=40, font=hdr_font, anchor="lt")
+    draw.text((col_dest, y + 10), "Destination", fill=40, font=hdr_font, anchor="lt")
+    draw.text((col_oper, y + 10), "Operator", fill=40, font=hdr_font, anchor="rt")
+    y += 55
+    draw.line([(PAD, y), (WIDTH - PAD, y)], fill=80, width=2)
+    y += 10
+
+    if not data or not TRAINS_API_KEY:
+        # Placeholder when no API key or no data
+        if not TRAINS_API_KEY:
+            msg = "TRAINS_API_KEY not set — add your Rail Data Marketplace key to .env"
+        else:
+            msg = "No departure data available"
+        _centered_text(draw, HEIGHT // 2 - 40, msg, 36, fill=100)
+        _centered_text(draw, HEIGHT // 2 + 40,
+                       "Get a free key at raildata.org.uk", 28, fill=140)
+        _dashboard_footer(draw)
+        return img
+
+    # Parse services
+    services = []
+    train_services = data.get("trainServices") or []
+    for svc in train_services[:10]:
+        std = svc.get("std", "")           # scheduled time
+        etd = svc.get("etd", "")           # expected time / "On time" / "Cancelled" / "Delayed"
+        platform = svc.get("platform", "-")
+        operator = svc.get("operatorCode", svc.get("operator", ""))
+        # Destination name
+        dest_list = svc.get("destination", [])
+        if dest_list:
+            dest = dest_list[0].get("locationName", "")
+        else:
+            dest = ""
+        services.append({
+            "time": std, "due": etd, "platform": platform,
+            "destination": dest, "operator": operator,
+        })
+
+    if not services:
+        _centered_text(draw, HEIGHT // 2, "No departures found", 42, fill=80)
+        _dashboard_footer(draw)
+        return img
+
+    # --- Render rows ---
+    row_font = get_font(34)
+    row_font_bold = get_font(34, bold=True)
+    num_font = get_font(26)
+    max_rows = min(len(services), 10)
+
+    for i, svc in enumerate(services[:max_rows]):
+        ry = y + i * row_h
+
+        # Alternating row shading
+        if i % 2 == 1:
+            draw.rectangle([PAD - 10, ry, WIDTH - PAD + 10, ry + row_h - 5], fill=245)
+
+        cy = ry + row_h // 2 - 5  # vertical center
+
+        # Row number
+        draw.text((col_num + 10, cy), str(i + 1), fill=140, font=num_font, anchor="lm")
+
+        # Time
+        draw.text((col_time, cy), svc["time"], fill=0, font=row_font_bold, anchor="lm")
+
+        # Due status (color-code: on time = normal, cancelled/delayed = dark)
+        due_text = svc["due"]
+        due_fill = 0
+        if due_text.lower() == "on time":
+            due_fill = 60
+        elif due_text.lower() in ("cancelled", "delayed"):
+            due_fill = 0  # black for emphasis
+        draw.text((col_due, cy), due_text, fill=due_fill, font=row_font, anchor="lm")
+
+        # Platform
+        draw.text((col_plat + 30, cy), svc["platform"], fill=0, font=row_font_bold, anchor="lm")
+
+        # Destination
+        dest_text = svc["destination"]
+        if len(dest_text) > 24:
+            dest_text = dest_text[:22] + "…"
+        draw.text((col_dest, cy), dest_text, fill=0, font=row_font_bold, anchor="lm")
+
+        # Operator
+        draw.text((col_oper, cy), svc["operator"], fill=80, font=row_font, anchor="rm")
+
+        # Dotted row separator
+        if i < max_rows - 1:
+            sep_y = ry + row_h - 3
+            for dx in range(PAD, WIDTH - PAD, 8):
+                draw.point((dx, sep_y), fill=180)
+
+    # --- Footer ---
+    _dashboard_footer(draw)
+
+    return img
+
+
 # ── Utility ──────────────────────────────────────────────────────────
 
 def now_str():
@@ -2004,4 +2174,5 @@ ALL_SCREENS = {
     "clock": render_clock_face,
     "movies": render_upcoming_movies,
     "learning": render_kid_learning_card,
+    "trains": render_trains,
 }
