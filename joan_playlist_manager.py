@@ -43,6 +43,7 @@ SCREEN_CATALOG = [
     ("learning",   "Kid Learning Card",     "Spelling, times tables, capitals"),
     ("trains",     "UK Train Departures",   "Live departures via Rail Data Marketplace"),
     ("bins",       "Bin Collection Day",    "Next collection dates for your address (Buckinghamshire)"),
+    ("flipdate",   "Flip Date",             "Flip-calendar style date display"),
 ]
 
 
