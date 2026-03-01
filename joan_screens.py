@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 # Reuse from main dashboard
 from joan_dashboard import (
@@ -28,6 +28,50 @@ from joan_dashboard import (
 )
 
 PAD = 60  # generous padding for full-screen layouts
+
+# --- CJK / Hebrew font helpers ---
+_INTL_FONT_CACHE = {}
+
+def _get_cjk_font(size: int) -> ImageFont.FreeTypeFont:
+    """Get a font that supports CJK (Chinese/Japanese/Korean) characters."""
+    key = ("cjk", size)
+    if key not in _INTL_FONT_CACHE:
+        candidates = [
+            "/Library/Fonts/Arial Unicode.ttf",
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/Supplemental/Songti.ttc",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        ]
+        for path in candidates:
+            try:
+                _INTL_FONT_CACHE[key] = ImageFont.truetype(path, size)
+                return _INTL_FONT_CACHE[key]
+            except OSError:
+                continue
+        _INTL_FONT_CACHE[key] = get_font(size)
+    return _INTL_FONT_CACHE[key]
+
+
+def _get_hebrew_font(size: int) -> ImageFont.FreeTypeFont:
+    """Get a font that supports Hebrew characters."""
+    key = ("he", size)
+    if key not in _INTL_FONT_CACHE:
+        candidates = [
+            "/Library/Fonts/Arial Unicode.ttf",
+            "/System/Library/Fonts/Supplemental/Raanana.ttc",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
+        ]
+        for path in candidates:
+            try:
+                _INTL_FONT_CACHE[key] = ImageFont.truetype(path, size)
+                return _INTL_FONT_CACHE[key]
+            except OSError:
+                continue
+        _INTL_FONT_CACHE[key] = get_font(size)
+    return _INTL_FONT_CACHE[key]
 
 
 # ── Cache layer ──────────────────────────────────────────────────────
@@ -2269,6 +2313,582 @@ def render_flip_date() -> Image.Image:
     return img
 
 
+# ── Chinese Proverbs ─────────────────────────────────────────────────
+
+_PROVERBS_URL = "https://raw.githubusercontent.com/SteveBloX/trmnl-recipes/master/chinese-proverbs/proverbs-en.json"
+
+
+def _fetch_proverbs():
+    """Fetch Chinese proverbs JSON from GitHub."""
+    r = requests.get(_PROVERBS_URL, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def render_chinese_proverb() -> Image.Image:
+    """Render a Chinese Proverb screen (English + Chinese, footer bar)."""
+    img = Image.new("L", (WIDTH, HEIGHT), 225)
+    draw = ImageDraw.Draw(img)
+
+    proverbs = _cache_fetch("chinese_proverbs", 86400, 604800, _fetch_proverbs)
+    if not proverbs:
+        _centered_text(draw, HEIGHT // 2, "No proverbs available", 40, fill=80)
+        return img
+
+    # Pick a proverb based on day-of-year so it rotates daily
+    idx = datetime.now().timetuple().tm_yday % len(proverbs)
+    proverb = proverbs[idx]
+    english = proverb.get("translation", "")
+    chinese = proverb.get("chinese", "")
+    num = proverb.get("id", idx + 1)
+
+    # English text — large, centered
+    _centered_text(draw, HEIGHT // 2 - 80, english, 64, bold=True, fill=30, max_width=WIDTH - 200)
+
+    # Chinese text — below English (needs CJK font)
+    if chinese:
+        ch_font = _get_cjk_font(42)
+        draw.text((WIDTH // 2, HEIGHT // 2 + 40), chinese, fill=60, font=ch_font, anchor="mt")
+
+    # Footer bar
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=180)
+    draw.text((PAD, footer_y + footer_h // 2), "Chinese Proverbs (Translated)",
+              fill=40, font=get_font(26, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD, footer_y + footer_h // 2), f"#{num}",
+              fill=40, font=get_font(26, bold=True), anchor="rm")
+
+    return img
+
+
+# ── Bank Holidays (England & Wales) ─────────────────────────────────
+
+def _fetch_bank_holidays():
+    """Fetch UK bank holidays from gov.uk."""
+    r = requests.get("https://www.gov.uk/bank-holidays.json", timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("england-and-wales", {}).get("events", [])
+
+
+def render_bank_holidays() -> Image.Image:
+    """Render upcoming bank holidays for England & Wales."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    events = _cache_fetch("bank_holidays", 86400, 604800, _fetch_bank_holidays)
+
+    # Header
+    header_h = 100
+    draw.rectangle([0, 0, WIDTH, header_h], fill=30)
+    draw.text((PAD, header_h // 2), "Upcoming Bank Holidays",
+              fill=240, font=get_font(48, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD, header_h // 2), "England & Wales",
+              fill=160, font=get_font(26), anchor="rm")
+
+    if not events:
+        _centered_text(draw, HEIGHT // 2, "No bank holiday data available", 36, fill=100)
+        _dashboard_footer(draw)
+        return img
+
+    today = datetime.now().date()
+    upcoming = []
+    for e in events:
+        try:
+            d = datetime.strptime(e["date"], "%Y-%m-%d").date()
+            if d >= today:
+                days_away = (d - today).days
+                upcoming.append({"title": e["title"], "date": d, "days": days_away})
+        except (ValueError, KeyError):
+            continue
+
+    upcoming.sort(key=lambda x: x["date"])
+    upcoming = upcoming[:10]
+
+    y = header_h + 40
+    row_h = 85
+    for i, hol in enumerate(upcoming):
+        is_next = (i == 0)
+
+        # Date column
+        date_str = hol["date"].strftime("%a %-d %b %Y")
+        date_font = get_font(30, bold=is_next)
+        draw.text((PAD, y + 10), date_str, fill=30 if is_next else 80, font=date_font, anchor="lt")
+
+        # Holiday name
+        name_font = get_font(32, bold=is_next)
+        draw.text((420, y + 10), hol["title"], fill=0 if is_next else 60, font=name_font, anchor="lt")
+
+        # Days away badge
+        if hol["days"] == 0:
+            badge = "TODAY"
+        elif hol["days"] == 1:
+            badge = "TOMORROW"
+        else:
+            badge = f"{hol['days']} days"
+        badge_font = get_font(24, bold=True)
+        bw = badge_font.getlength(badge) + 24
+        bx = WIDTH - PAD - bw
+        if hol["days"] <= 7:
+            draw.rounded_rectangle([bx, y + 6, bx + bw, y + 42], radius=8, fill=40)
+            draw.text((bx + bw // 2, y + 24), badge, fill=240, font=badge_font, anchor="mm")
+        else:
+            draw.text((WIDTH - PAD, y + 10), badge, fill=120, font=get_font(24), anchor="rt")
+
+        # Separator
+        if i < len(upcoming) - 1:
+            draw.line([(PAD, y + row_h - 10), (WIDTH - PAD, y + row_h - 10)], fill=210, width=1)
+        y += row_h
+
+    _dashboard_footer(draw)
+    return img
+
+
+# ── Flip Clock ───────────────────────────────────────────────────────
+
+def render_flip_clock() -> Image.Image:
+    """Render a flip clock screen with 4 digit panels + AM/PM."""
+    img = Image.new("L", (WIDTH, HEIGHT), 215)
+    draw = ImageDraw.Draw(img)
+
+    now = datetime.now()
+    hour_12 = now.hour % 12
+    if hour_12 == 0:
+        hour_12 = 12
+    ampm = "AM" if now.hour < 12 else "PM"
+    digits = f"{hour_12:02d}{now.minute:02d}"
+
+    # 4 digit panels + smaller AM/PM panel
+    panel_w = 200
+    panel_h = 340
+    gap = 24
+    total_w = panel_w * 4 + gap * 3 + 100  # extra for AM/PM
+    start_x = (WIDTH - total_w) // 2
+    y = (HEIGHT - panel_h) // 2
+
+    for i, digit in enumerate(digits):
+        x = start_x + i * (panel_w + gap)
+        # Shadow/border effect
+        draw.rounded_rectangle([x - 3, y - 3, x + panel_w + 3, y + panel_h + 3],
+                               radius=28, fill=140)
+        # Black panel
+        draw.rounded_rectangle([x, y, x + panel_w, y + panel_h],
+                               radius=24, fill=10, outline=80, width=2)
+        # Flip hinge line
+        mid_y = y + panel_h // 2
+        draw.line([(x, mid_y), (x + panel_w, mid_y)], fill=60, width=2)
+        # Digit
+        font = get_font(260, bold=True)
+        draw.text((x + panel_w // 2, y + panel_h // 2), digit,
+                  fill=240, font=font, anchor="mm")
+
+    # AM/PM panel (smaller, to the right of last digit)
+    ampm_x = start_x + 4 * (panel_w + gap)
+    ampm_w = 90
+    ampm_h = 80
+    ampm_y = y + panel_h - ampm_h
+    draw.rounded_rectangle([ampm_x - 2, ampm_y - 2, ampm_x + ampm_w + 2, ampm_y + ampm_h + 2],
+                           radius=14, fill=140)
+    draw.rounded_rectangle([ampm_x, ampm_y, ampm_x + ampm_w, ampm_y + ampm_h],
+                           radius=12, fill=80)
+    draw.text((ampm_x + ampm_w // 2, ampm_y + ampm_h // 2), ampm,
+              fill=220, font=get_font(36, bold=True), anchor="mm")
+
+    return img
+
+
+# ── Weather Glance ───────────────────────────────────────────────────
+
+# WMO weather code → icon character (simplified for e-ink)
+_WMO_LABELS = {
+    0: "Clear", 1: "Sunny", 2: "Partly", 3: "Cloud",
+    45: "Fog", 48: "Fog",
+    51: "Drzl", 53: "Drzl", 55: "Drzl",
+    61: "Rain", 63: "Rain", 65: "Rain",
+    71: "Snow", 73: "Snow", 75: "Snow",
+    80: "Shwr", 81: "Rain", 82: "Rain",
+    95: "Storm", 96: "Storm", 99: "Storm",
+}
+
+
+def _fetch_weather_glance():
+    """Fetch 7-day forecast from Open-Meteo for weather glance."""
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={WEATHER_LAT}&longitude={WEATHER_LON}"
+        f"&current=temperature_2m,weather_code"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"
+        f"&timezone=auto"
+    )
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def render_weather_glance() -> Image.Image:
+    """Render a weather glance screen with current temp and 7-day bar forecast."""
+    img = Image.new("L", (WIDTH, HEIGHT), 230)
+    draw = ImageDraw.Draw(img)
+
+    data = _cache_fetch("weather_glance", 1800, 7200, _fetch_weather_glance)
+
+    # Footer bar
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=30)
+    draw.text((PAD, footer_y + footer_h // 2), "Weather Glance",
+              fill=220, font=get_font(28, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD, footer_y + footer_h // 2), WEATHER_LOCATION,
+              fill=160, font=get_font(26), anchor="rm")
+
+    if not data:
+        _centered_text(draw, HEIGHT // 2, "No weather data", 40, fill=80)
+        return img
+
+    current = data.get("current", {})
+    daily = data.get("daily", {})
+
+    # Current temperature (left side)
+    cur_temp = current.get("temperature_2m", "?")
+    cur_code = current.get("weather_code", 0)
+    time_str = datetime.now().strftime("%-I:%M %p")
+    draw.text((PAD, 340), time_str, fill=100, font=get_font(28), anchor="lt")
+    draw.text((PAD, 380), f"{int(cur_temp) if isinstance(cur_temp, (int, float)) else cur_temp}°",
+              fill=20, font=get_font(140, bold=True), anchor="lt")
+
+    # 7-day forecast bars (right side)
+    dates = daily.get("time", [])
+    highs = daily.get("temperature_2m_max", [])
+    lows = daily.get("temperature_2m_min", [])
+    codes = daily.get("weather_code", [])
+    n_days = min(7, len(dates))
+
+    if n_days > 0 and highs and lows:
+        # Bar chart area
+        bar_left = 340
+        bar_right = WIDTH - PAD
+        bar_top = 120
+        bar_bottom = footer_y - 60
+        bar_w = 60
+        gap_w = (bar_right - bar_left - bar_w * n_days) // max(n_days - 1, 1)
+
+        all_temps = [t for t in highs[:n_days] + lows[:n_days] if t is not None]
+        if all_temps:
+            t_min = min(all_temps)
+            t_max = max(all_temps)
+            t_range = max(t_max - t_min, 1)
+
+            for i in range(n_days):
+                cx = bar_left + i * (bar_w + gap_w) + bar_w // 2
+                bx = cx - bar_w // 2
+
+                # Day label at top
+                try:
+                    dt = datetime.strptime(dates[i], "%Y-%m-%d")
+                    day_label = dt.strftime("%a %-d")
+                except (ValueError, IndexError):
+                    day_label = ""
+                draw.text((cx, bar_top - 30), day_label, fill=80,
+                          font=get_font(22), anchor="mt")
+
+                # Temperature bar
+                hi = highs[i] if i < len(highs) and highs[i] is not None else t_min
+                lo = lows[i] if i < len(lows) and lows[i] is not None else t_min
+                hi_y = bar_bottom - int((hi - t_min) / t_range * (bar_bottom - bar_top - 80))
+                lo_y = bar_bottom - int((lo - t_min) / t_range * (bar_bottom - bar_top - 80))
+
+                # Today's bar is darker
+                bar_fill = 160 if i == 0 else 200
+                if codes and i < len(codes) and codes[i] in (61, 63, 65, 80, 81, 82, 95, 96, 99):
+                    bar_fill = 100  # darker for rain
+
+                draw.rounded_rectangle([bx, hi_y, bx + bar_w, lo_y],
+                                       radius=bar_w // 2, fill=bar_fill)
+
+                # High temp above bar
+                draw.text((cx, hi_y - 8), f"{int(hi)}", fill=40,
+                          font=get_font(24, bold=True), anchor="mb")
+                # Low temp below bar
+                draw.text((cx, lo_y + 8), f"{int(lo)}", fill=100,
+                          font=get_font(22), anchor="mt")
+
+                # Weather label above high temp
+                wcode = codes[i] if i < len(codes) else 0
+                label = _WMO_LABELS.get(wcode, _WMO_LABELS.get(wcode // 10 * 10, ""))
+                if label:
+                    draw.text((cx, hi_y - 35), label, fill=60,
+                              font=get_font(18), anchor="mb")
+
+    return img
+
+
+# ── Daily Torah Wisdom ───────────────────────────────────────────────
+
+# Books of wisdom/proverbs in Tanakh for daily rotation
+_TORAH_REFS = [
+    "Proverbs.1", "Proverbs.2", "Proverbs.3", "Proverbs.4", "Proverbs.5",
+    "Proverbs.6", "Proverbs.7", "Proverbs.8", "Proverbs.9", "Proverbs.10",
+    "Proverbs.11", "Proverbs.12", "Proverbs.13", "Proverbs.14", "Proverbs.15",
+    "Proverbs.16", "Proverbs.17", "Proverbs.18", "Proverbs.19", "Proverbs.20",
+    "Proverbs.21", "Proverbs.22", "Proverbs.23", "Proverbs.24", "Proverbs.25",
+    "Proverbs.26", "Proverbs.27", "Proverbs.28", "Proverbs.29", "Proverbs.30",
+    "Proverbs.31",
+    "Ecclesiastes.1", "Ecclesiastes.2", "Ecclesiastes.3", "Ecclesiastes.4",
+    "Ecclesiastes.5", "Ecclesiastes.6", "Ecclesiastes.7", "Ecclesiastes.8",
+    "Ecclesiastes.9", "Ecclesiastes.10", "Ecclesiastes.11", "Ecclesiastes.12",
+    "Psalms.1", "Psalms.19", "Psalms.23", "Psalms.27", "Psalms.34",
+    "Psalms.37", "Psalms.90", "Psalms.91", "Psalms.100", "Psalms.103",
+    "Psalms.119", "Psalms.121", "Psalms.127", "Psalms.139", "Psalms.145",
+    "Pirkei_Avot.1", "Pirkei_Avot.2", "Pirkei_Avot.3", "Pirkei_Avot.4",
+    "Pirkei_Avot.5", "Pirkei_Avot.6",
+]
+
+
+def _fetch_torah_verse():
+    """Fetch a daily Torah verse from Sefaria API."""
+    # Pick chapter based on day of year
+    day = datetime.now().timetuple().tm_yday
+    chapter_ref = _TORAH_REFS[day % len(_TORAH_REFS)]
+    # Pick a specific verse from the chapter
+    url = f"https://www.sefaria.org/api/texts/{chapter_ref}?context=0"
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+
+    texts = data.get("text", [])
+    he_texts = data.get("he", [])
+    ref_base = data.get("ref", chapter_ref)
+
+    if isinstance(texts, str):
+        texts = [texts]
+    if isinstance(he_texts, str):
+        he_texts = [he_texts]
+
+    if not texts:
+        return None
+
+    # Pick a verse based on day
+    vidx = day % len(texts)
+    en_text = re.sub(r"<[^>]+>", "", str(texts[vidx]))
+    he_text = re.sub(r"<[^>]+>", "", str(he_texts[vidx])) if vidx < len(he_texts) else ""
+    verse_ref = f"{ref_base.rsplit('.', 1)[0] if '.' in ref_base else ref_base}:{vidx + 1}"
+
+    return {"en": en_text, "he": he_text, "ref": verse_ref}
+
+
+def render_torah_wisdom() -> Image.Image:
+    """Render a Daily Torah Wisdom screen with English + Hebrew."""
+    img = Image.new("L", (WIDTH, HEIGHT), 225)
+    draw = ImageDraw.Draw(img)
+
+    verse = _cache_fetch("torah_wisdom", 43200, 172800, _fetch_torah_verse)
+
+    # Footer bar
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=180)
+    draw.text((PAD, footer_y + footer_h // 2), "Daily Torah Wisdom",
+              fill=30, font=get_font(28, bold=True), anchor="lm")
+
+    if not verse:
+        _centered_text(draw, HEIGHT // 2, "No verse available", 40, fill=80)
+        return img
+
+    en_text = verse.get("en", "")
+    he_text = verse.get("he", "")
+    ref_str = verse.get("ref", "")
+
+    # Truncate very long texts to keep layout clean
+    if len(en_text) > 250:
+        en_text = en_text[:247].rstrip() + "..."
+
+    # English text (left half, vertically centered)
+    en_area_w = WIDTH // 2 - 100
+    en_font = get_font(36)
+    en_lines = []
+    for paragraph in en_text.split("\n"):
+        words = paragraph.split()
+        line = ""
+        for w in words:
+            test = f"{line} {w}".strip()
+            if en_font.getlength(test) > en_area_w:
+                if line:
+                    en_lines.append(line)
+                line = w
+            else:
+                line = test
+        if line:
+            en_lines.append(line)
+    en_lines = en_lines[:8]
+    total_en_h = len(en_lines) * 46
+    en_y = (footer_y - total_en_h) // 2
+    for ln in en_lines:
+        draw.text((PAD + en_area_w // 2, en_y), ln, fill=30,
+                  font=en_font, anchor="mt")
+        en_y += 46
+
+    # Reference below English block
+    if ref_str:
+        draw.text((PAD + en_area_w // 2, en_y + 15), f"— {ref_str}", fill=80,
+                  font=get_font(28), anchor="mt")
+
+    # Hebrew text (right half, vertically centered, needs Hebrew font)
+    if he_text:
+        if len(he_text) > 200:
+            he_text = he_text[:197].rstrip() + "..."
+        he_font = _get_hebrew_font(34)
+        he_area_w = WIDTH // 2 - 100
+        words = he_text.split()
+        he_lines = []
+        line = ""
+        for w in words:
+            test = f"{line} {w}".strip()
+            if he_font.getlength(test) > he_area_w:
+                if line:
+                    he_lines.append(line)
+                line = w
+            else:
+                line = test
+        if line:
+            he_lines.append(line)
+        he_lines = he_lines[:8]
+        total_he_h = len(he_lines) * 48
+        he_y = (footer_y - total_he_h) // 2
+        for ln in he_lines:
+            draw.text((WIDTH - PAD, he_y), ln, fill=60, font=he_font, anchor="rt")
+            he_y += 48
+
+    return img
+
+
+# ── BBC News ─────────────────────────────────────────────────────────
+
+def _fetch_bbc_news():
+    """Fetch BBC News articles."""
+    r = requests.get("https://bbc-news-api.vercel.app/news?lang=english", timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    # Collect articles from multiple categories, dedup by title
+    articles = []
+    seen = set()
+    for cat in ["Latest", "Watch", "Must watch", "More world news", "US & Canada news"]:
+        for item in data.get(cat, []):
+            title = item.get("title")
+            if title and title not in seen:
+                seen.add(title)
+                articles.append(item)
+    return articles
+
+
+def render_bbc_news() -> Image.Image:
+    """Render a BBC News screen with top stories and images."""
+    img = Image.new("L", (WIDTH, HEIGHT), 245)
+    draw = ImageDraw.Draw(img)
+
+    articles = _cache_fetch("bbc_news", 1800, 7200, _fetch_bbc_news)
+
+    # BBC NEWS header
+    header_h = 70
+    draw.rectangle([0, 0, WIDTH, header_h], fill=255)
+    # BBC blocks
+    bbc_font = get_font(36, bold=True)
+    bx = PAD
+    for letter in ["B", "B", "C"]:
+        lw = bbc_font.getlength(letter) + 16
+        draw.rectangle([bx, 12, bx + lw, 56], fill=0)
+        draw.text((bx + lw // 2, 34), letter, fill=255, font=bbc_font, anchor="mm")
+        bx += lw + 6
+    draw.text((bx + 10, 34), "NEWS", fill=0, font=get_font(38, bold=True), anchor="lm")
+
+    if not articles:
+        _centered_text(draw, HEIGHT // 2, "No BBC News available", 36, fill=100)
+        return img
+
+    # Top 2 stories with images (side by side)
+    top_y = header_h + 10
+    img_h = 300
+    img_w = (WIDTH - PAD * 2 - 20) // 2
+
+    for i in range(min(2, len(articles))):
+        art = articles[i]
+        ax = PAD + i * (img_w + 20)
+
+        # Fetch thumbnail
+        thumb_url = art.get("image_link", "")
+        if thumb_url:
+            try:
+                # Get higher res version
+                thumb_url = thumb_url.replace("/240/", "/480/").replace("/160x90/", "/480x270/")
+                tr = requests.get(thumb_url, timeout=10)
+                tr.raise_for_status()
+                thumb = Image.open(BytesIO(tr.content)).convert("L")
+                thumb = thumb.resize((img_w, img_h), Image.LANCZOS)
+                img.paste(thumb, (ax, top_y))
+            except Exception:
+                draw.rectangle([ax, top_y, ax + img_w, top_y + img_h], fill=180)
+
+        # Title overlay at bottom of image
+        title = art.get("title", "")
+        if title:
+            # Dark gradient overlay area
+            overlay_h = 90
+            oy = top_y + img_h - overlay_h
+            for row in range(overlay_h):
+                alpha = int(180 * (row / overlay_h))
+                draw.line([(ax, oy + row), (ax + img_w, oy + row)], fill=max(0, 40 - alpha // 3))
+
+            # Truncate title to fit
+            title_font = get_font(24, bold=True)
+            max_tw = img_w - 20
+            if title_font.getlength(title) > max_tw * 2:
+                while title_font.getlength(title + "...") > max_tw * 2:
+                    title = title[:-1]
+                title = title.rstrip() + "..."
+            # Word-wrap into 2 lines max
+            words = title.split()
+            lines = []
+            line = ""
+            for w in words:
+                test = f"{line} {w}".strip()
+                if title_font.getlength(test) > max_tw:
+                    if line:
+                        lines.append(line)
+                    line = w
+                else:
+                    line = test
+            if line:
+                lines.append(line)
+            lines = lines[:3]
+            ty = top_y + img_h - 20 - len(lines) * 30
+            for ln in lines:
+                draw.text((ax + 10, ty), ln, fill=240, font=title_font, anchor="lt")
+                ty += 30
+
+    # Remaining headlines as text list
+    list_y = top_y + img_h + 30
+    remaining = articles[2:9]
+    for art in remaining:
+        title = art.get("title", "")
+        if not title:
+            continue
+        if list_y > HEIGHT - 40:
+            break
+
+        # Truncate
+        h_font = get_font(28)
+        max_w = WIDTH - PAD * 2 - 120
+        if h_font.getlength(title) > max_w:
+            while len(title) > 10 and h_font.getlength(title + "...") > max_w:
+                title = title[:-1]
+            title = title.rstrip() + "..."
+
+        draw.text((PAD + 100, list_y + 2), title, fill=20, font=h_font, anchor="lt")
+        list_y += 48
+
+    return img
+
+
 # ── GitHub Trending Repos ────────────────────────────────────────────
 
 def _fetch_github_trending():
@@ -2676,4 +3296,10 @@ ALL_SCREENS = {
     "flipdate": render_flip_date,
     "github": render_github_trending,
     "doodle": render_google_doodle,
+    "proverb": render_chinese_proverb,
+    "holidays": render_bank_holidays,
+    "flipclock": render_flip_clock,
+    "weatherglance": render_weather_glance,
+    "torah": render_torah_wisdom,
+    "bbc": render_bbc_news,
 }

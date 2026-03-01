@@ -46,6 +46,12 @@ SCREEN_CATALOG = [
     ("flipdate",   "Flip Date",             "Flip-calendar style date display"),
     ("github",     "GitHub Trending",       "Daily trending repositories on GitHub"),
     ("doodle",     "Google Doodle",         "Google Doodle of the Day with image"),
+    ("proverb",    "Chinese Proverb",       "Daily translated Chinese proverb"),
+    ("holidays",   "Bank Holidays",         "Upcoming bank holidays for England & Wales"),
+    ("flipclock",  "Flip Clock",            "Retro flip clock with AM/PM"),
+    ("weatherglance", "Weather Glance",     "Current temp + 7-day bar chart forecast"),
+    ("torah",      "Torah Wisdom",          "Daily verse from Proverbs/Psalms/Ecclesiastes"),
+    ("bbc",        "BBC News",              "Top BBC stories with images and headlines"),
 ]
 
 

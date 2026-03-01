@@ -40,6 +40,12 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Flip Date** — retro flip-calendar display showing day name, day number, and month in large black panels with flip-hinge lines (inspired by [trmnl-flip-date](https://github.com/alisterscott/trmnl-flip-date)); pure calculation, no API
 - **GitHub Trending** — top 10 daily trending repositories in a two-column layout with repo name, description, language, stars, forks, and daily star gain; powered by [doforce/github-trending](https://github.com/doforce/github-trending) API (free, no key)
 - **Google Doodle** — latest Google Doodle artwork displayed full-screen with title; scraped from [doodles.google](https://doodles.google/) (free, no key)
+- **Chinese Proverb** — daily translated Chinese proverb with original characters; rotates through 127 proverbs from [SteveBloX/trmnl-recipes](https://github.com/SteveBloX/trmnl-recipes) (static JSON, no API key)
+- **Bank Holidays** — upcoming England & Wales bank holidays with countdown badges; data from [gov.uk](https://www.gov.uk/bank-holidays.json) (free, no key)
+- **Flip Clock** — retro flip clock with 4 digit panels showing HH:MM in 12-hour format with AM/PM; pure calculation, no API
+- **Weather Glance** — current temperature + 7-day bar chart forecast with high/low temps and weather labels; reuses [Open-Meteo](https://open-meteo.com/) weather data (free, no key)
+- **Torah Wisdom** — daily verse from Proverbs, Psalms, Ecclesiastes or Pirkei Avot with English + Hebrew text; powered by [Sefaria](https://developers.sefaria.org/) API (free, no key)
+- **BBC News** — top BBC stories with thumbnail images + headline list; powered by [BBC News API](https://bbc-news-api.vercel.app/) (free, no key)
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
@@ -348,6 +354,12 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `flipdate` | Flip-calendar date display | System time |
 | `github` | Top 10 daily trending repos | doforce/github-trending API |
 | `doodle` | Google Doodle of the Day | doodles.google (scraped) |
+| `proverb` | Chinese Proverb (translated) | Static JSON from GitHub |
+| `holidays` | Upcoming bank holidays | gov.uk API |
+| `flipclock` | Retro flip clock | System time |
+| `weatherglance` | Current temp + 7-day bars | Open-Meteo API |
+| `torah` | Daily Torah Wisdom (EN + HE) | Sefaria API |
+| `bbc` | BBC News top stories | BBC News API |
 
 ## Playlist Manager (Web UI)
 
