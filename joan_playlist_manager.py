@@ -62,22 +62,51 @@ def save_config(config: dict):
 
 
 def render_html(config: dict) -> str:
-    """Render the playlist manager page."""
-    enabled = set(config.get("enabled", []))
+    """Render the playlist manager page with drag-and-drop reordering."""
+    enabled_list = config.get("enabled", [])
     interval = config.get("interval", 180)
 
-    rows = ""
-    for key, name, desc in SCREEN_CATALOG:
-        checked = "checked" if key in enabled else ""
-        rows += f"""
-        <label class="screen-row" for="chk-{key}">
-            <input type="checkbox" name="screens" value="{key}" id="chk-{key}" {checked}>
+    # Build lookup for catalog info
+    catalog = {key: (name, desc) for key, name, desc in SCREEN_CATALOG}
+
+    # Enabled screens in their saved order
+    enabled_rows = ""
+    for idx, key in enumerate(enabled_list):
+        if key not in catalog:
+            continue
+        name, desc = catalog[key]
+        enabled_rows += f"""
+        <div class="screen-row" draggable="true" data-key="{key}" data-enabled="1">
+            <span class="drag-handle" title="Drag to reorder">&#9776;</span>
+            <input type="checkbox" checked data-key="{key}">
             <div class="screen-info">
                 <span class="screen-name">{name}</span>
                 <span class="screen-desc">{desc}</span>
             </div>
             <span class="screen-key">{key}</span>
-        </label>"""
+            <div class="move-btns">
+                <button type="button" class="btn-move" onclick="moveUp(this)" title="Move up">&uarr;</button>
+                <button type="button" class="btn-move" onclick="moveDown(this)" title="Move down">&darr;</button>
+            </div>
+        </div>"""
+
+    # Disabled screens (not in enabled list)
+    enabled_set = set(enabled_list)
+    disabled_rows = ""
+    for key, name, desc in SCREEN_CATALOG:
+        if key in enabled_set:
+            continue
+        disabled_rows += f"""
+        <div class="screen-row disabled" data-key="{key}" data-enabled="0">
+            <span class="drag-handle dim">&#9776;</span>
+            <input type="checkbox" data-key="{key}">
+            <div class="screen-info">
+                <span class="screen-name">{name}</span>
+                <span class="screen-desc">{desc}</span>
+            </div>
+            <span class="screen-key">{key}</span>
+            <div class="move-btns"></div>
+        </div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -125,6 +154,7 @@ def render_html(config: dict) -> str:
         .toolbar-left {{
             display: flex;
             gap: 8px;
+            align-items: center;
         }}
         .btn-sm {{
             padding: 6px 14px;
@@ -154,6 +184,14 @@ def render_html(config: dict) -> str:
             font-size: 13px;
             text-align: center;
         }}
+        .section-label {{
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #555;
+            margin: 20px 0 8px 4px;
+        }}
         .screen-list {{
             display: flex;
             flex-direction: column;
@@ -162,15 +200,31 @@ def render_html(config: dict) -> str:
         .screen-row {{
             display: flex;
             align-items: center;
-            gap: 14px;
-            padding: 14px 16px;
+            gap: 12px;
+            padding: 12px 14px;
             background: #161616;
             border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.15s;
+            transition: background 0.15s, opacity 0.15s, transform 0.15s;
             user-select: none;
         }}
         .screen-row:hover {{ background: #1e1e1e; }}
+        .screen-row.disabled {{ opacity: 0.45; }}
+        .screen-row.drag-over {{
+            border-top: 2px solid #4ade80;
+            margin-top: -2px;
+        }}
+        .screen-row.dragging {{
+            opacity: 0.3;
+        }}
+        .drag-handle {{
+            cursor: grab;
+            font-size: 18px;
+            color: #555;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }}
+        .drag-handle:active {{ cursor: grabbing; }}
+        .drag-handle.dim {{ color: #333; }}
         .screen-row input[type="checkbox"] {{
             width: 20px;
             height: 20px;
@@ -183,6 +237,7 @@ def render_html(config: dict) -> str:
             display: flex;
             flex-direction: column;
             gap: 2px;
+            min-width: 0;
         }}
         .screen-name {{
             font-size: 15px;
@@ -201,7 +256,31 @@ def render_html(config: dict) -> str:
             padding: 3px 8px;
             border-radius: 4px;
             border: 1px solid #2a2a2a;
+            flex-shrink: 0;
         }}
+        .move-btns {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex-shrink: 0;
+        }}
+        .btn-move {{
+            width: 28px;
+            height: 22px;
+            font-size: 14px;
+            border: 1px solid #333;
+            background: #1a1a1a;
+            color: #888;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+            transition: all 0.15s;
+        }}
+        .btn-move:hover {{ background: #252525; color: #fff; border-color: #4ade80; }}
         .save-bar {{
             position: sticky;
             bottom: 0;
@@ -241,53 +320,211 @@ def render_html(config: dict) -> str:
             font-size: 13px;
             color: #666;
         }}
+        .order-num {{
+            font-size: 12px;
+            font-weight: 700;
+            color: #4ade80;
+            width: 20px;
+            text-align: center;
+            flex-shrink: 0;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Joan Playlist Manager</h1>
-            <p>Select which screens rotate on your Joan devices</p>
+            <p>Drag to reorder, tick to enable. Order = rotation order.</p>
         </header>
 
-        <form method="POST" action="/save" id="playlist-form">
-            <div class="toolbar">
-                <div class="toolbar-left">
-                    <button type="button" class="btn-sm" onclick="toggleAll(true)">Select All</button>
-                    <button type="button" class="btn-sm" onclick="toggleAll(false)">Deselect All</button>
-                    <span class="count" id="count"></span>
-                </div>
-                <div class="interval-group">
-                    <span>Interval</span>
-                    <input type="number" name="interval" value="{interval}" min="60" max="3600" step="30">
-                    <span>sec</span>
-                </div>
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button type="button" class="btn-sm" onclick="toggleAll(true)">Select All</button>
+                <button type="button" class="btn-sm" onclick="toggleAll(false)">Deselect All</button>
+                <span class="count" id="count"></span>
             </div>
+            <div class="interval-group">
+                <span>Interval</span>
+                <input type="number" id="interval" value="{interval}" min="60" max="3600" step="30">
+                <span>sec</span>
+            </div>
+        </div>
 
-            <div class="screen-list">
-                {rows}
-            </div>
+        <div class="section-label">Enabled (rotation order)</div>
+        <div class="screen-list" id="enabled-list">
+            {enabled_rows}
+        </div>
 
-            <div class="save-bar">
-                <button type="submit" class="btn-save">Save Playlist</button>
-            </div>
-        </form>
+        <div class="section-label">Disabled</div>
+        <div class="screen-list" id="disabled-list">
+            {disabled_rows}
+        </div>
+
+        <div class="save-bar">
+            <button type="button" class="btn-save" onclick="savePlaylist()">Save Playlist</button>
+        </div>
     </div>
 
     <div class="toast" id="toast">Playlist saved!</div>
 
     <script>
+        // --- Move up/down ---
+        function moveUp(btn) {{
+            const row = btn.closest('.screen-row');
+            const prev = row.previousElementSibling;
+            if (prev) row.parentNode.insertBefore(row, prev);
+            renumber();
+        }}
+        function moveDown(btn) {{
+            const row = btn.closest('.screen-row');
+            const next = row.nextElementSibling;
+            if (next) row.parentNode.insertBefore(next, row);
+            renumber();
+        }}
+
+        // --- Checkbox toggle: move between enabled/disabled ---
+        document.addEventListener('change', function(e) {{
+            if (e.target.type !== 'checkbox') return;
+            const row = e.target.closest('.screen-row');
+            if (e.target.checked) {{
+                // Move to enabled list
+                row.classList.remove('disabled');
+                row.dataset.enabled = '1';
+                row.querySelector('.move-btns').innerHTML =
+                    '<button type="button" class="btn-move" onclick="moveUp(this)" title="Move up">&uarr;</button>' +
+                    '<button type="button" class="btn-move" onclick="moveDown(this)" title="Move down">&darr;</button>';
+                row.querySelector('.drag-handle').classList.remove('dim');
+                document.getElementById('enabled-list').appendChild(row);
+            }} else {{
+                // Move to disabled list
+                row.classList.add('disabled');
+                row.dataset.enabled = '0';
+                row.querySelector('.move-btns').innerHTML = '';
+                row.querySelector('.drag-handle').classList.add('dim');
+                document.getElementById('disabled-list').appendChild(row);
+            }}
+            renumber();
+        }});
+
+        // --- Drag and drop (enabled list only) ---
+        let dragEl = null;
+        const enabledList = document.getElementById('enabled-list');
+
+        enabledList.addEventListener('dragstart', function(e) {{
+            dragEl = e.target.closest('.screen-row');
+            if (!dragEl || dragEl.dataset.enabled !== '1') {{ e.preventDefault(); return; }}
+            dragEl.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }});
+        enabledList.addEventListener('dragend', function() {{
+            if (dragEl) dragEl.classList.remove('dragging');
+            enabledList.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            dragEl = null;
+            renumber();
+        }});
+        enabledList.addEventListener('dragover', function(e) {{
+            e.preventDefault();
+            const target = e.target.closest('.screen-row');
+            enabledList.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            if (target && target !== dragEl && target.dataset.enabled === '1') {{
+                target.classList.add('drag-over');
+            }}
+        }});
+        enabledList.addEventListener('drop', function(e) {{
+            e.preventDefault();
+            const target = e.target.closest('.screen-row');
+            if (target && target !== dragEl && target.dataset.enabled === '1') {{
+                const rect = target.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {{
+                    enabledList.insertBefore(dragEl, target);
+                }} else {{
+                    enabledList.insertBefore(dragEl, target.nextSibling);
+                }}
+            }}
+            enabledList.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            renumber();
+        }});
+
+        // --- Touch drag for mobile ---
+        let touchEl = null, touchClone = null, touchStartY = 0;
+        enabledList.addEventListener('touchstart', function(e) {{
+            const handle = e.target.closest('.drag-handle');
+            if (!handle) return;
+            touchEl = handle.closest('.screen-row');
+            if (!touchEl || touchEl.dataset.enabled !== '1') return;
+            touchStartY = e.touches[0].clientY;
+            touchEl.classList.add('dragging');
+        }}, {{passive: true}});
+        document.addEventListener('touchmove', function(e) {{
+            if (!touchEl) return;
+            e.preventDefault();
+            const y = e.touches[0].clientY;
+            const rows = [...enabledList.querySelectorAll('.screen-row:not(.dragging)')];
+            let target = null;
+            for (const row of rows) {{
+                const rect = row.getBoundingClientRect();
+                if (y > rect.top && y < rect.bottom) {{ target = row; break; }}
+            }}
+            enabledList.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            if (target) target.classList.add('drag-over');
+        }}, {{passive: false}});
+        document.addEventListener('touchend', function() {{
+            if (!touchEl) return;
+            const over = enabledList.querySelector('.drag-over');
+            if (over) {{
+                enabledList.insertBefore(touchEl, over);
+            }}
+            touchEl.classList.remove('dragging');
+            enabledList.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            touchEl = null;
+            renumber();
+        }});
+
+        // --- Helpers ---
         function toggleAll(state) {{
-            document.querySelectorAll('input[name="screens"]').forEach(cb => cb.checked = state);
+            document.querySelectorAll('.screen-row input[type="checkbox"]').forEach(cb => {{
+                if (cb.checked !== state) {{ cb.checked = state; cb.dispatchEvent(new Event('change', {{bubbles:true}})); }}
+            }});
+        }}
+
+        function renumber() {{
+            const rows = enabledList.querySelectorAll('.screen-row');
+            rows.forEach((row, i) => {{
+                let num = row.querySelector('.order-num');
+                if (!num) {{
+                    num = document.createElement('span');
+                    num.className = 'order-num';
+                    row.insertBefore(num, row.querySelector('.drag-handle').nextSibling);
+                }}
+                num.textContent = i + 1;
+            }});
             updateCount();
         }}
+
         function updateCount() {{
-            const n = document.querySelectorAll('input[name="screens"]:checked').length;
-            const t = document.querySelectorAll('input[name="screens"]').length;
+            const n = enabledList.querySelectorAll('.screen-row').length;
+            const t = document.querySelectorAll('.screen-row').length;
             document.getElementById('count').textContent = n + ' / ' + t + ' enabled';
         }}
-        document.querySelectorAll('input[name="screens"]').forEach(cb => cb.addEventListener('change', updateCount));
-        updateCount();
+
+        function savePlaylist() {{
+            const enabled = [...enabledList.querySelectorAll('.screen-row')].map(r => r.dataset.key);
+            const interval = parseInt(document.getElementById('interval').value) || 180;
+            fetch('/save', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{enabled, interval}})
+            }}).then(r => r.json()).then(d => {{
+                const toast = document.getElementById('toast');
+                toast.textContent = d.message || 'Playlist saved!';
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2500);
+            }}).catch(() => alert('Save failed'));
+        }}
+
+        // Init numbering
+        renumber();
 
         // Show toast if redirected after save
         if (window.location.search.includes('saved=1')) {{
@@ -314,15 +551,22 @@ class PlaylistHandler(BaseHTTPRequestHandler):
         if self.path == "/save":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode()
-            params = parse_qs(body)
-            enabled = params.get("screens", [])
-            interval = int(params.get("interval", [180])[0])
-            interval = max(60, min(3600, interval))
+            content_type = self.headers.get("Content-Type", "")
+            if "json" in content_type:
+                data = json.loads(body)
+                enabled = data.get("enabled", [])
+                interval = data.get("interval", 180)
+            else:
+                params = parse_qs(body)
+                enabled = params.get("screens", [])
+                interval = int(params.get("interval", [180])[0])
+            interval = max(60, min(3600, int(interval)))
             save_config({"enabled": enabled, "interval": interval})
-            print(f"[playlist] Saved: {len(enabled)} screens, {interval}s interval")
-            self.send_response(303)
-            self.send_header("Location", "/?saved=1")
+            print(f"[playlist] Saved: {len(enabled)} screens, {interval}s interval, order: {enabled}")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "message": f"Saved {len(enabled)} screens, {interval}s interval"}).encode())
         else:
             self.send_response(404)
             self.end_headers()
