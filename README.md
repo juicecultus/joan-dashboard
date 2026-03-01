@@ -38,6 +38,8 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **UK Train Departures** — live departure board showing scheduled time, expected arrival, platform, destination, and operator via [Rail Data Marketplace](https://raildata.org.uk/) (free API key required via `TRAINS_API_KEY`); configurable station and destination CRS codes
 - **Bin Collection Day** — next bin collection date with bin type icons, urgency banner (TODAY/TOMORROW), and upcoming schedule; powered by Buckinghamshire Council’s iTouchVision API (uses [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData) encryption approach); configurable via `BIN_UPRN`
 - **Flip Date** — retro flip-calendar display showing day name, day number, and month in large black panels with flip-hinge lines (inspired by [trmnl-flip-date](https://github.com/alisterscott/trmnl-flip-date)); pure calculation, no API
+- **GitHub Trending** — top 10 daily trending repositories in a two-column layout with repo name, description, language, stars, forks, and daily star gain; powered by [doforce/github-trending](https://github.com/doforce/github-trending) API (free, no key)
+- **Google Doodle** — latest Google Doodle artwork displayed full-screen with title; scraped from [doodles.google](https://doodles.google/) (free, no key)
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
@@ -344,6 +346,8 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `trains` | UK train departure board | Rail Data Marketplace API (key required) |
 | `bins` | Bin collection day with urgency banner | Buckinghamshire Council / iTouchVision API |
 | `flipdate` | Flip-calendar date display | System time |
+| `github` | Top 10 daily trending repos | doforce/github-trending API |
+| `doodle` | Google Doodle of the Day | doodles.google (scraped) |
 
 ## Playlist Manager (Web UI)
 

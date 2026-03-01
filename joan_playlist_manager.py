@@ -44,6 +44,8 @@ SCREEN_CATALOG = [
     ("trains",     "UK Train Departures",   "Live departures via Rail Data Marketplace"),
     ("bins",       "Bin Collection Day",    "Next collection dates for your address (Buckinghamshire)"),
     ("flipdate",   "Flip Date",             "Flip-calendar style date display"),
+    ("github",     "GitHub Trending",       "Daily trending repositories on GitHub"),
+    ("doodle",     "Google Doodle",         "Google Doodle of the Day with image"),
 ]
 
 

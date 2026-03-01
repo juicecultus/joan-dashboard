@@ -2269,6 +2269,211 @@ def render_flip_date() -> Image.Image:
     return img
 
 
+# ── GitHub Trending Repos ────────────────────────────────────────────
+
+def _fetch_github_trending():
+    """Fetch daily trending repos from GitHub Trending API."""
+    r = requests.get(
+        "https://trend.doforce.dpdns.org/repo",
+        params={"since": "daily"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def render_github_trending() -> Image.Image:
+    """Render a GitHub Trending Repos screen (two-column layout, e-ink)."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    repos = _cache_fetch("github_trending", 3600, 43200, _fetch_github_trending)
+
+    # --- Footer bar ---
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=20)
+    # GitHub icon (simple octocat silhouette text)
+    draw.text((PAD, footer_y + footer_h // 2), "GitHub Trending Repos",
+              fill=220, font=get_font(28, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD, footer_y + footer_h // 2), "Daily",
+              fill=160, font=get_font(26), anchor="rm")
+
+    if not repos:
+        _centered_text(draw, HEIGHT // 2 - 30, "No trending data available", 36, fill=100)
+        return img
+
+    # Two-column layout matching the reference image
+    repos = repos[:10]
+    col_w = (WIDTH - PAD * 2 - 40) // 2
+    left_x = PAD
+    right_x = PAD + col_w + 40
+    start_y = 30
+
+    for i, repo in enumerate(repos):
+        col_x = left_x if i < 5 else right_x
+        idx = i % 5
+        y = start_y + idx * (footer_y - start_y - 20) // 5
+
+        # Rank number
+        rank_font = get_font(22, bold=True)
+        draw.text((col_x, y + 2), str(i + 1), fill=120, font=rank_font, anchor="lt")
+
+        # Repo name: owner / name
+        repo_name = repo.get("repo", "/unknown").lstrip("/")
+        parts = repo_name.split("/", 1)
+        name_x = col_x + 30
+        if len(parts) == 2:
+            owner_font = get_font(22)
+            name_font = get_font(24, bold=True)
+            owner_text = parts[0] + " / "
+            draw.text((name_x, y), owner_text, fill=80, font=owner_font, anchor="lt")
+            owner_w = owner_font.getlength(owner_text)
+            draw.text((name_x + owner_w, y), parts[1], fill=0, font=name_font, anchor="lt")
+        else:
+            draw.text((name_x, y), repo_name, fill=0, font=get_font(24, bold=True), anchor="lt")
+
+        # Description (truncated)
+        desc = repo.get("desc", "")
+        if desc:
+            max_desc_w = col_w - 35
+            desc_font = get_font(18)
+            # Truncate desc to fit
+            if desc_font.getlength(desc) > max_desc_w:
+                while len(desc) > 10 and desc_font.getlength(desc + "...") > max_desc_w:
+                    desc = desc[:-1]
+                desc = desc.rstrip() + "..."
+            draw.text((name_x, y + 30), desc, fill=100, font=desc_font, anchor="lt")
+
+        # Stats line: language, stars, forks, change
+        stats_y = y + 55
+        sx = name_x
+        stats_font = get_font(17)
+        stats_bold = get_font(17, bold=True)
+
+        lang = repo.get("lang", "")
+        if lang:
+            # Language dot
+            draw.ellipse([sx, stats_y + 3, sx + 10, stats_y + 13], fill=80)
+            sx += 14
+            draw.text((sx, stats_y), lang, fill=80, font=stats_font, anchor="lt")
+            sx += stats_font.getlength(lang) + 16
+
+        stars = repo.get("stars", 0)
+        if stars:
+            star_str = f"{stars:,}" if stars < 100000 else f"{stars // 1000}k"
+            draw.text((sx, stats_y), "*", fill=80, font=stats_bold, anchor="lt")
+            sx += 12
+            draw.text((sx, stats_y), star_str, fill=80, font=stats_font, anchor="lt")
+            sx += stats_font.getlength(star_str) + 16
+
+        forks = repo.get("forks", 0)
+        if forks:
+            fork_str = f"{forks:,}" if forks < 100000 else f"{forks // 1000}k"
+            draw.text((sx, stats_y), "Y", fill=80, font=stats_bold, anchor="lt")
+            sx += 14
+            draw.text((sx, stats_y), fork_str, fill=80, font=stats_font, anchor="lt")
+            sx += stats_font.getlength(fork_str) + 20
+
+        change = repo.get("change", 0)
+        if change:
+            change_str = f"* {change:,} today"
+            # Right-align the change in the column
+            cw = stats_bold.getlength(change_str)
+            draw.text((col_x + col_w - 5, stats_y), change_str,
+                      fill=40, font=stats_bold, anchor="rt")
+
+        # Separator line (except last in column)
+        if idx < 4:
+            sep_y = y + 85
+            draw.line([(name_x, sep_y), (col_x + col_w, sep_y)], fill=210, width=1)
+
+    return img
+
+
+# ── Google Doodle of the Day ─────────────────────────────────────────
+
+def _fetch_google_doodle():
+    """Fetch the latest Google Doodle by scraping doodles.google."""
+    r = requests.get("https://doodles.google/", timeout=15, headers={
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    })
+    r.raise_for_status()
+    # Parse img tags with class hero-tag-carousel__collage-card-img
+    pattern = r'<img\s+class="hero-tag-carousel__collage-card-img"\s+src="([^"]+)"\s+alt="([^"]*)"'
+    matches = re.findall(pattern, r.text)
+    if not matches:
+        return None
+    src, alt = matches[0]
+    if src.startswith("//"):
+        src = "https:" + src
+    return {"title": alt, "image_url": src}
+
+
+def render_google_doodle() -> Image.Image:
+    """Render a Google Doodle of the Day screen."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(img)
+
+    doodle = _cache_fetch("google_doodle", 7200, 86400, _fetch_google_doodle)
+
+    # --- Header ---
+    header_h = 90
+    draw.rectangle([0, 0, WIDTH, header_h], fill=30)
+    draw.text((PAD, header_h // 2), "Google Doodle of the Day",
+              fill=240, font=get_font(42, bold=True), anchor="lm")
+    today_str = datetime.now().strftime("%A, %-d %B %Y")
+    draw.text((WIDTH - PAD, header_h // 2), today_str,
+              fill=160, font=get_font(24), anchor="rm")
+
+    if not doodle:
+        _centered_text(draw, HEIGHT // 2, "No doodle available today", 38, fill=100)
+        _dashboard_footer(draw)
+        return img
+
+    title = doodle.get("title", "Google Doodle")
+    image_url = doodle.get("image_url", "")
+
+    # --- Fetch and display the doodle image ---
+    doodle_img = None
+    if image_url:
+        try:
+            r = requests.get(image_url, timeout=15)
+            r.raise_for_status()
+            doodle_img = Image.open(BytesIO(r.content))
+        except Exception as e:
+            print(f"[doodle] Failed to fetch image: {e}")
+
+    if doodle_img:
+        # Convert to grayscale
+        doodle_img = doodle_img.convert("L")
+
+        # Scale to fit in the available area
+        avail_w = WIDTH - PAD * 2
+        avail_h = HEIGHT - header_h - 200  # room for title and footer
+        dw, dh = doodle_img.size
+        scale = min(avail_w / dw, avail_h / dh)
+        new_w = int(dw * scale)
+        new_h = int(dh * scale)
+        doodle_img = doodle_img.resize((new_w, new_h), Image.LANCZOS)
+
+        # Center the image
+        img_x = (WIDTH - new_w) // 2
+        img_y = header_h + 40
+        img.paste(doodle_img, (img_x, img_y))
+        title_y = img_y + new_h + 30
+    else:
+        title_y = HEIGHT // 2
+
+    # --- Title ---
+    _centered_text(draw, title_y, title, 38, bold=True, fill=30, max_width=WIDTH - PAD * 2)
+
+    # --- Footer ---
+    _dashboard_footer(draw)
+
+    return img
+
+
 # ── UK Train Departures ──────────────────────────────────────────────
 
 # CRS code → human-readable station name (common stations)
@@ -2469,4 +2674,6 @@ ALL_SCREENS = {
     "trains": render_trains,
     "bins": render_bins,
     "flipdate": render_flip_date,
+    "github": render_github_trending,
+    "doodle": render_google_doodle,
 }
