@@ -36,6 +36,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Upcoming Movies** — featured movie with poster, rating, synopsis + "also coming soon" list from [TMDB](https://www.themoviedb.org/) (free API key required via `TMDB_API_KEY`)
 - **Kid Learning Card** — rotating educational cards: spelling bee, times tables, world capitals quiz, and general knowledge questions with hidden answers
 - **UK Train Departures** — live departure board showing scheduled time, expected arrival, platform, destination, and operator via [Rail Data Marketplace](https://raildata.org.uk/) (free API key required via `TRAINS_API_KEY`); configurable station and destination CRS codes
+- **Bin Collection Day** — next bin collection date with bin type icons, urgency banner (TODAY/TOMORROW), and upcoming schedule; powered by Buckinghamshire Council's iTouchVision API (uses [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData) encryption approach); configurable via `BIN_UPRN`
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
@@ -340,6 +341,7 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `movies` | Upcoming cinema releases | TMDB API (key required) |
 | `learning` | Kid learning cards (spelling, times tables, capitals, quiz) | Generated locally |
 | `trains` | UK train departure board | Rail Data Marketplace API (key required) |
+| `bins` | Bin collection day with urgency banner | Buckinghamshire Council / iTouchVision API |
 
 ## Playlist Manager (Web UI)
 

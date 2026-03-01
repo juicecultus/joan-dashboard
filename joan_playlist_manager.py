@@ -42,6 +42,7 @@ SCREEN_CATALOG = [
     ("movies",     "Upcoming Movies",       "Featured movie + coming soon list"),
     ("learning",   "Kid Learning Card",     "Spelling, times tables, capitals"),
     ("trains",     "UK Train Departures",   "Live departures via Rail Data Marketplace"),
+    ("bins",       "Bin Collection Day",    "Next collection dates for your address (Buckinghamshire)"),
 ]
 
 

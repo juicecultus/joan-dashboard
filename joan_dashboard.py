@@ -55,6 +55,9 @@ TRAINS_API_KEY = os.environ.get("TRAINS_API_KEY", "")
 TRAINS_STATION = os.environ.get("TRAINS_STATION", "AVP")       # CRS code (Aylesbury Vale Parkway)
 TRAINS_DESTINATION = os.environ.get("TRAINS_DESTINATION", "MYB")  # CRS code (London Marylebone)
 
+# Bin Collection: Buckinghamshire Council (via iTouchVision API)
+BIN_UPRN = os.environ.get("BIN_UPRN", "766351323")  # UPRN for 26 Golden Mede, Waddesdon
+
 # Google API token file (created by joan_google_auth.py)
 TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json")
 
