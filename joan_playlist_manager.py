@@ -52,6 +52,7 @@ SCREEN_CATALOG = [
     ("weatherglance", "Weather Glance",     "Current temp + 7-day bar chart forecast"),
     ("torah",      "Torah Wisdom",          "Daily verse from Proverbs/Psalms/Ecclesiastes"),
     ("bbc",        "BBC News",              "Top BBC stories with images and headlines"),
+    ("element",    "Element of the Day",    "Daily periodic table element with properties"),
 ]
 
 

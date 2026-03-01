@@ -46,6 +46,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Weather Glance** — current temperature + 7-day bar chart forecast with high/low temps and weather labels; reuses [Open-Meteo](https://open-meteo.com/) weather data (free, no key)
 - **Torah Wisdom** — daily verse from Proverbs, Psalms, Ecclesiastes or Pirkei Avot with English + Hebrew text; powered by [Sefaria](https://developers.sefaria.org/) API (free, no key)
 - **BBC News** — top BBC stories with thumbnail images + headline list; powered by [BBC News API](https://bbc-news-api.vercel.app/) (free, no key)
+- **Element of the Day** — daily periodic table element with symbol card, atomic number, mass, category badge, and full properties grid (state, config, melting/boiling points, density, discovery year); data from [hossain-khan/trmnl-elements-plugin](https://github.com/hossain-khan/trmnl-elements-plugin) (static JSON, no key)
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
@@ -360,6 +361,7 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `weatherglance` | Current temp + 7-day bars | Open-Meteo API |
 | `torah` | Daily Torah Wisdom (EN + HE) | Sefaria API |
 | `bbc` | BBC News top stories | BBC News API |
+| `element` | Periodic table element of the day | Static JSON from GitHub |
 
 ## Playlist Manager (Web UI)
 

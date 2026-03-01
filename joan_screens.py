@@ -2501,15 +2501,47 @@ def render_flip_clock() -> Image.Image:
 # ── Weather Glance ───────────────────────────────────────────────────
 
 # WMO weather code → icon character (simplified for e-ink)
-_WMO_LABELS = {
-    0: "Clear", 1: "Sunny", 2: "Partly", 3: "Cloud",
-    45: "Fog", 48: "Fog",
-    51: "Drzl", 53: "Drzl", 55: "Drzl",
-    61: "Rain", 63: "Rain", 65: "Rain",
-    71: "Snow", 73: "Snow", 75: "Snow",
-    80: "Shwr", 81: "Rain", 82: "Rain",
-    95: "Storm", 96: "Storm", 99: "Storm",
-}
+def _draw_weather_icon(draw, cx, cy, code, size=28):
+    """Draw a simple weather icon centered at (cx, cy) based on WMO code."""
+    r = size // 2
+    if code in (0, 1):  # Clear / Sunny — sun with rays
+        draw.ellipse([cx - r + 4, cy - r + 4, cx + r - 4, cy + r - 4], outline=40, width=2)
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            x1 = cx + int((r - 2) * math.cos(rad))
+            y1 = cy + int((r - 2) * math.sin(rad))
+            x2 = cx + int((r + 5) * math.cos(rad))
+            y2 = cy + int((r + 5) * math.sin(rad))
+            draw.line([(x1, y1), (x2, y2)], fill=40, width=2)
+    elif code in (2,):  # Partly cloudy — small sun + cloud
+        draw.ellipse([cx - r, cy - r, cx, cy], outline=60, width=2)
+        for angle in range(0, 360, 60):
+            rad = math.radians(angle)
+            sx, sy = cx - r // 2, cy - r // 2
+            draw.line([(sx + int(6 * math.cos(rad)), sy + int(6 * math.sin(rad))),
+                        (sx + int(10 * math.cos(rad)), sy + int(10 * math.sin(rad)))], fill=60, width=1)
+        draw.ellipse([cx - 4, cy - 4, cx + r, cy + r // 2], fill=120, outline=80, width=1)
+    elif code in (3, 45, 48):  # Cloud / Fog
+        draw.ellipse([cx - r, cy - 6, cx + r, cy + 6], fill=140, outline=80, width=2)
+        draw.ellipse([cx - r + 6, cy - 12, cx + 4, cy + 2], fill=160, outline=80, width=1)
+    elif code in (51, 53, 55, 80):  # Drizzle / Shower
+        draw.ellipse([cx - r + 2, cy - 10, cx + r - 2, cy + 2], fill=160, outline=80, width=1)
+        for dx in (-6, 0, 6):
+            draw.line([(cx + dx, cy + 6), (cx + dx - 2, cy + 12)], fill=80, width=2)
+    elif code in (61, 63, 65, 81, 82):  # Rain
+        draw.ellipse([cx - r + 2, cy - 10, cx + r - 2, cy + 2], fill=120, outline=60, width=2)
+        for dx in (-8, -2, 4, 10):
+            draw.line([(cx + dx, cy + 6), (cx + dx - 3, cy + 14)], fill=50, width=2)
+    elif code in (71, 73, 75):  # Snow
+        draw.ellipse([cx - r + 2, cy - 10, cx + r - 2, cy + 2], fill=170, outline=100, width=1)
+        for dx in (-6, 0, 6):
+            draw.text((cx + dx, cy + 10), "*", fill=60, font=get_font(14), anchor="mm")
+    elif code in (95, 96, 99):  # Storm
+        draw.ellipse([cx - r + 2, cy - 10, cx + r - 2, cy + 2], fill=80, outline=40, width=2)
+        draw.polygon([(cx - 2, cy + 4), (cx + 4, cy + 4), (cx, cy + 14),
+                       (cx + 6, cy + 4), (cx + 2, cy - 2)], fill=40)
+    else:  # Unknown — small dot
+        draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=120)
 
 
 def _fetch_weather_glance():
@@ -2613,12 +2645,9 @@ def render_weather_glance() -> Image.Image:
                 draw.text((cx, lo_y + 8), f"{int(lo)}", fill=100,
                           font=get_font(22), anchor="mt")
 
-                # Weather label above high temp
+                # Weather icon above high temp
                 wcode = codes[i] if i < len(codes) else 0
-                label = _WMO_LABELS.get(wcode, _WMO_LABELS.get(wcode // 10 * 10, ""))
-                if label:
-                    draw.text((cx, hi_y - 35), label, fill=60,
-                              font=get_font(18), anchor="mb")
+                _draw_weather_icon(draw, cx, hi_y - 45, wcode, size=32)
 
     return img
 
@@ -2789,25 +2818,25 @@ def render_bbc_news() -> Image.Image:
     articles = _cache_fetch("bbc_news", 1800, 7200, _fetch_bbc_news)
 
     # BBC NEWS header
-    header_h = 70
+    header_h = 90
     draw.rectangle([0, 0, WIDTH, header_h], fill=255)
     # BBC blocks
-    bbc_font = get_font(36, bold=True)
+    bbc_font = get_font(52, bold=True)
     bx = PAD
     for letter in ["B", "B", "C"]:
-        lw = bbc_font.getlength(letter) + 16
-        draw.rectangle([bx, 12, bx + lw, 56], fill=0)
-        draw.text((bx + lw // 2, 34), letter, fill=255, font=bbc_font, anchor="mm")
-        bx += lw + 6
-    draw.text((bx + 10, 34), "NEWS", fill=0, font=get_font(38, bold=True), anchor="lm")
+        lw = bbc_font.getlength(letter) + 20
+        draw.rectangle([bx, 14, bx + lw, 74], fill=0)
+        draw.text((bx + lw // 2, 44), letter, fill=255, font=bbc_font, anchor="mm")
+        bx += lw + 8
+    draw.text((bx + 12, 44), "NEWS", fill=0, font=get_font(54, bold=True), anchor="lm")
 
     if not articles:
-        _centered_text(draw, HEIGHT // 2, "No BBC News available", 36, fill=100)
+        _centered_text(draw, HEIGHT // 2, "No BBC News available", 48, fill=100)
         return img
 
-    # Top 2 stories with images (side by side)
+    # Top 2 stories with images (side by side, 50% taller)
     top_y = header_h + 10
-    img_h = 300
+    img_h = 450
     img_w = (WIDTH - PAD * 2 - 20) // 2
 
     for i in range(min(2, len(articles))):
@@ -2819,7 +2848,7 @@ def render_bbc_news() -> Image.Image:
         if thumb_url:
             try:
                 # Get higher res version
-                thumb_url = thumb_url.replace("/240/", "/480/").replace("/160x90/", "/480x270/")
+                thumb_url = thumb_url.replace("/240/", "/960/").replace("/160x90/", "/960x540/")
                 tr = requests.get(thumb_url, timeout=10)
                 tr.raise_for_status()
                 thumb = Image.open(BytesIO(tr.content)).convert("L")
@@ -2832,20 +2861,20 @@ def render_bbc_news() -> Image.Image:
         title = art.get("title", "")
         if title:
             # Dark gradient overlay area
-            overlay_h = 90
+            overlay_h = 140
             oy = top_y + img_h - overlay_h
             for row in range(overlay_h):
-                alpha = int(180 * (row / overlay_h))
+                alpha = int(200 * (row / overlay_h))
                 draw.line([(ax, oy + row), (ax + img_w, oy + row)], fill=max(0, 40 - alpha // 3))
 
             # Truncate title to fit
-            title_font = get_font(24, bold=True)
-            max_tw = img_w - 20
-            if title_font.getlength(title) > max_tw * 2:
-                while title_font.getlength(title + "...") > max_tw * 2:
+            title_font = get_font(36, bold=True)
+            max_tw = img_w - 30
+            if title_font.getlength(title) > max_tw * 3:
+                while title_font.getlength(title + "...") > max_tw * 3:
                     title = title[:-1]
                 title = title.rstrip() + "..."
-            # Word-wrap into 2 lines max
+            # Word-wrap into 3 lines max
             words = title.split()
             lines = []
             line = ""
@@ -2860,14 +2889,14 @@ def render_bbc_news() -> Image.Image:
             if line:
                 lines.append(line)
             lines = lines[:3]
-            ty = top_y + img_h - 20 - len(lines) * 30
+            ty = top_y + img_h - 24 - len(lines) * 42
             for ln in lines:
-                draw.text((ax + 10, ty), ln, fill=240, font=title_font, anchor="lt")
-                ty += 30
+                draw.text((ax + 14, ty), ln, fill=240, font=title_font, anchor="lt")
+                ty += 42
 
     # Remaining headlines as text list
     list_y = top_y + img_h + 30
-    remaining = articles[2:9]
+    remaining = articles[2:7]
     for art in remaining:
         title = art.get("title", "")
         if not title:
@@ -2876,15 +2905,145 @@ def render_bbc_news() -> Image.Image:
             break
 
         # Truncate
-        h_font = get_font(28)
-        max_w = WIDTH - PAD * 2 - 120
+        h_font = get_font(36)
+        max_w = WIDTH - PAD * 2
         if h_font.getlength(title) > max_w:
             while len(title) > 10 and h_font.getlength(title + "...") > max_w:
                 title = title[:-1]
             title = title.rstrip() + "..."
 
-        draw.text((PAD + 100, list_y + 2), title, fill=20, font=h_font, anchor="lt")
-        list_y += 48
+        draw.text((PAD, list_y + 2), title, fill=20, font=h_font, anchor="lt")
+        list_y += 56
+
+    return img
+
+
+# ── Element of the Day ────────────────────────────────────────────────
+
+_ELEMENTS_URL = "https://raw.githubusercontent.com/hossain-khan/trmnl-elements-plugin/main/data-all.json"
+
+
+def _fetch_elements():
+    """Fetch periodic table elements JSON from GitHub."""
+    r = requests.get(_ELEMENTS_URL, timeout=15)
+    r.raise_for_status()
+    return r.json().get("elements", [])
+
+
+def render_element_of_day() -> Image.Image:
+    """Render an Element of the Day screen (periodic table style)."""
+    img = Image.new("L", (WIDTH, HEIGHT), 225)
+    draw = ImageDraw.Draw(img)
+
+    elements = _cache_fetch("periodic_elements", 604800, 2592000, _fetch_elements)
+
+    # Footer bar
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=180)
+    draw.text((PAD, footer_y + footer_h // 2), "Element of the Day",
+              fill=30, font=get_font(28, bold=True), anchor="lm")
+
+    if not elements:
+        _centered_text(draw, HEIGHT // 2, "No element data available", 40, fill=80)
+        return img
+
+    # Pick element based on day of year
+    idx = datetime.now().timetuple().tm_yday % len(elements)
+    el = elements[idx]
+
+    num = el.get("atomic_number", "?")
+    symbol = el.get("symbol", "?")
+    name = el.get("name", "Unknown")
+    mass = el.get("atomic_mass", "?")
+    category = el.get("category", "")
+    state = el.get("standard_state", "")
+    config = el.get("electron_configuration", "")
+    melting = el.get("melting_point", "")
+    boiling = el.get("boiling_point", "")
+    density = el.get("density", "")
+    discovered = el.get("year_discovered", "")
+    electronegativity = el.get("electronegativity", "")
+    oxidation = el.get("oxidation_states", "")
+    radius = el.get("atomic_radius", "")
+    affinity = el.get("electron_affinity", "")
+    ionization = el.get("ionization_energy", "")
+
+    # --- Element card (left side) ---
+    card_x, card_y = 60, 80
+    card_w, card_h = 300, 420
+    draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h],
+                   fill=255, outline=20, width=3)
+
+    # Atomic number (top-left of card)
+    draw.text((card_x + 20, card_y + 20), str(num),
+              fill=30, font=get_font(64, bold=True), anchor="lt")
+    # Atomic mass (top-right of card)
+    draw.text((card_x + card_w - 20, card_y + 30), str(mass),
+              fill=60, font=get_font(36), anchor="rt")
+    # Symbol (large, centered)
+    draw.text((card_x + card_w // 2, card_y + 200), symbol,
+              fill=10, font=get_font(160, bold=True), anchor="mm")
+    # Name below symbol
+    draw.text((card_x + card_w // 2, card_y + 310), name,
+              fill=30, font=get_font(32), anchor="mt")
+    # Category badge
+    if category:
+        cat_font = get_font(22, bold=True)
+        cw = cat_font.getlength(category) + 20
+        cx = card_x + (card_w - cw) // 2
+        cy = card_y + 360
+        draw.rounded_rectangle([cx, cy, cx + cw, cy + 34], radius=6, fill=60)
+        draw.text((cx + cw // 2, cy + 17), category, fill=230, font=cat_font, anchor="mm")
+
+    # --- Element name header (right side) ---
+    draw.text((420, 90), name.upper(), fill=20, font=get_font(56, bold=True), anchor="lt")
+    draw.line([(420, 155), (WIDTH - PAD, 155)], fill=120, width=2)
+
+    # --- Properties grid (right side, two columns) ---
+    props_left = [
+        ("State", state),
+        ("Electronegativity", str(electronegativity) if electronegativity else ""),
+        ("Boiling Point", str(boiling) if boiling else ""),
+        ("Oxidation States", str(oxidation) if oxidation else ""),
+        ("Atomic Radius", f"{radius} pm" if radius else ""),
+        ("Electron Affinity", f"{affinity} eV" if affinity else ""),
+    ]
+    props_right = [
+        ("Electron Config", str(config) if config else ""),
+        ("Melting Point", str(melting) if melting else ""),
+        ("Density", f"{density} g/cm³" if density else ""),
+        ("Discovered", str(discovered) if discovered else ""),
+        ("Ionization Energy", f"{ionization} eV" if ionization else ""),
+        ("Group", str(category) if category else ""),
+    ]
+
+    label_font = get_font(22, bold=True)
+    value_font = get_font(26)
+    row_h = 58
+    ly = 180
+    ry = 180
+
+    for label, value in props_left:
+        if not value:
+            continue
+        # Label in rounded box
+        lw = label_font.getlength(label) + 12
+        draw.rounded_rectangle([420, ly, 420 + lw, ly + 30], radius=4, outline=40, width=1)
+        draw.text((426, ly + 15), label, fill=40, font=label_font, anchor="lm")
+        # Value next to it
+        draw.text((430 + lw, ly + 15), value, fill=20, font=value_font, anchor="lm")
+        ly += row_h
+
+    for label, value in props_right:
+        if not value:
+            continue
+        lw = label_font.getlength(label) + 12
+        rx = 720
+        draw.rounded_rectangle([rx, ry, rx + lw, ry + 30], radius=4, outline=40, width=1)
+        draw.text((rx + 6, ry + 15), label, fill=40, font=label_font, anchor="lm")
+        draw.text((rx + lw + 10, ry + 15), value, fill=20, font=value_font, anchor="lm")
+        ry += row_h
 
     return img
 
@@ -2936,46 +3095,46 @@ def render_github_trending() -> Image.Image:
         y = start_y + idx * (footer_y - start_y - 20) // 5
 
         # Rank number
-        rank_font = get_font(22, bold=True)
+        rank_font = get_font(36, bold=True)
         draw.text((col_x, y + 2), str(i + 1), fill=120, font=rank_font, anchor="lt")
 
         # Repo name: owner / name
         repo_name = repo.get("repo", "/unknown").lstrip("/")
         parts = repo_name.split("/", 1)
-        name_x = col_x + 30
+        name_x = col_x + 45
         if len(parts) == 2:
-            owner_font = get_font(22)
-            name_font = get_font(24, bold=True)
+            owner_font = get_font(28)
+            name_font = get_font(30, bold=True)
             owner_text = parts[0] + " / "
             draw.text((name_x, y), owner_text, fill=80, font=owner_font, anchor="lt")
             owner_w = owner_font.getlength(owner_text)
             draw.text((name_x + owner_w, y), parts[1], fill=0, font=name_font, anchor="lt")
         else:
-            draw.text((name_x, y), repo_name, fill=0, font=get_font(24, bold=True), anchor="lt")
+            draw.text((name_x, y), repo_name, fill=0, font=get_font(30, bold=True), anchor="lt")
 
         # Description (truncated)
         desc = repo.get("desc", "")
         if desc:
-            max_desc_w = col_w - 35
-            desc_font = get_font(18)
+            max_desc_w = col_w - 50
+            desc_font = get_font(24)
             # Truncate desc to fit
             if desc_font.getlength(desc) > max_desc_w:
                 while len(desc) > 10 and desc_font.getlength(desc + "...") > max_desc_w:
                     desc = desc[:-1]
                 desc = desc.rstrip() + "..."
-            draw.text((name_x, y + 30), desc, fill=100, font=desc_font, anchor="lt")
+            draw.text((name_x, y + 38), desc, fill=100, font=desc_font, anchor="lt")
 
         # Stats line: language, stars, forks, change
-        stats_y = y + 55
+        stats_y = y + 68
         sx = name_x
-        stats_font = get_font(17)
-        stats_bold = get_font(17, bold=True)
+        stats_font = get_font(22)
+        stats_bold = get_font(22, bold=True)
 
         lang = repo.get("lang", "")
         if lang:
             # Language dot
-            draw.ellipse([sx, stats_y + 3, sx + 10, stats_y + 13], fill=80)
-            sx += 14
+            draw.ellipse([sx, stats_y + 4, sx + 14, stats_y + 18], fill=80)
+            sx += 18
             draw.text((sx, stats_y), lang, fill=80, font=stats_font, anchor="lt")
             sx += stats_font.getlength(lang) + 16
 
@@ -2983,7 +3142,7 @@ def render_github_trending() -> Image.Image:
         if stars:
             star_str = f"{stars:,}" if stars < 100000 else f"{stars // 1000}k"
             draw.text((sx, stats_y), "*", fill=80, font=stats_bold, anchor="lt")
-            sx += 12
+            sx += 16
             draw.text((sx, stats_y), star_str, fill=80, font=stats_font, anchor="lt")
             sx += stats_font.getlength(star_str) + 16
 
@@ -2991,7 +3150,7 @@ def render_github_trending() -> Image.Image:
         if forks:
             fork_str = f"{forks:,}" if forks < 100000 else f"{forks // 1000}k"
             draw.text((sx, stats_y), "Y", fill=80, font=stats_bold, anchor="lt")
-            sx += 14
+            sx += 18
             draw.text((sx, stats_y), fork_str, fill=80, font=stats_font, anchor="lt")
             sx += stats_font.getlength(fork_str) + 20
 
@@ -3005,7 +3164,7 @@ def render_github_trending() -> Image.Image:
 
         # Separator line (except last in column)
         if idx < 4:
-            sep_y = y + 85
+            sep_y = y + 100
             draw.line([(name_x, sep_y), (col_x + col_w, sep_y)], fill=210, width=1)
 
     return img
@@ -3302,4 +3461,5 @@ ALL_SCREENS = {
     "weatherglance": render_weather_glance,
     "torah": render_torah_wisdom,
     "bbc": render_bbc_news,
+    "element": render_element_of_day,
 }
