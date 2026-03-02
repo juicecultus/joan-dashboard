@@ -800,6 +800,8 @@ def render_and_push_all(render_fn):
         return
     for dev in devices:
         _active_device_uuid = dev["uuid"]
+        status = fetch_device_status()
+        print(f"[render] {dev['name']} uuid={dev['uuid'][:12]} active={_active_device_uuid[:12]} batt={status.get('battery')} temp={status.get('temperature')}")
         img = render_fn()
         push_image(img, dev["uuid"], (dev["width"], dev["height"]))
     _active_device_uuid = None
