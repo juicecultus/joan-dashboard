@@ -15,7 +15,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Room temperature** — from the Joan's built-in LM75 sensor (via VSS API)
 - **Battery level** — live device battery percentage from VSS
 
-### Playlist Screens (19 rotating screens)
+### Playlist Screens (32 rotating screens)
 - **Daily Agenda** — large-font view of today's events, readable across the room
 - **Motivational Quote** — daily quote from [ZenQuotes](https://zenquotes.io/) API
 - **Countdown** — days until your next calendar events ("School breaks up — Tomorrow")
@@ -47,6 +47,9 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Torah Wisdom** — daily verse from Proverbs, Psalms, Ecclesiastes or Pirkei Avot with English + Hebrew text; powered by [Sefaria](https://developers.sefaria.org/) API (free, no key)
 - **BBC News** — top BBC stories with thumbnail images + headline list; powered by [BBC News API](https://bbc-news-api.vercel.app/) (free, no key)
 - **Element of the Day** — daily periodic table element with symbol card, atomic number, mass, category badge, and full properties grid (state, config, melting/boiling points, density, discovery year); data from [hossain-khan/trmnl-elements-plugin](https://github.com/hossain-khan/trmnl-elements-plugin) (static JSON, no key)
+- **Daily Cartoon** — today's cartoon from [The New Yorker](https://www.newyorker.com/cartoons/daily-cartoon) with caption, auto-cropped whitespace for optimal e-ink display (scraped, no key)
+- **Literate Movies** — daily film from a curated [Letterboxd list](https://letterboxd.com/shawn_stubbs/list/literate-movies/) with poster, director, cast, and synopsis; rotates through 500+ movies (scraped, no key)
+- **Buddha Quote** — daily wisdom quote from [Buddha API](https://buddha-api.com/) in a serene minimalist layout (free, no key)
 
 ### System
 - **Multi-device support** — auto-discovers all allowed Joan devices from VSS; renders per-device at 1600×1200 (with device-specific battery/temperature in the footer), then LANCZOS-resizes to each device's native resolution (e.g. 1600×1200 for 13", 1024×758 for 6"). Add new devices by simply allowing them in VSS — zero code changes needed
@@ -284,7 +287,7 @@ python joan_dashboard.py --loop 60 --playlist dashboard,quote,art
 python joan_dashboard.py --loop 60
 ```
 
-Available screen names: `dashboard`, `agenda`, `quote`, `countdown`, `photo`, `word`, `history`, `art`, `radar`
+Available screen names: `dashboard`, `agenda`, `quote`, `countdown`, `photo`, `word`, `history`, `art`, `radar`, `joke`, `progress`, `maths`, `rss`, `stocks`, `todo`, `moon`, `airquality`, `clock`, `movies`, `learning`, `trains`, `bins`, `flipdate`, `github`, `doodle`, `proverb`, `holidays`, `flipclock`, `weatherglance`, `torah`, `bbc`, `element`, `cartoon`, `litmovies`, `buddha`
 
 **Battery note:** The `--loop` interval controls how often your *server* pushes a new image. The Joan device's own poll interval (configured in VSS) determines battery drain. A 5-minute device poll interval gives ~4-6 months battery life on the 10,000mAh Joan 13".
 
@@ -362,6 +365,9 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `torah` | Daily Torah Wisdom (EN + HE) | Sefaria API |
 | `bbc` | BBC News top stories | BBC News API |
 | `element` | Periodic table element of the day | Static JSON from GitHub |
+| `cartoon` | The New Yorker Daily Cartoon + caption | newyorker.com (scraped) |
+| `litmovies` | Literate Movies — daily film from Letterboxd | letterboxd.com (scraped) |
+| `buddha` | Buddha wisdom quote | Buddha API |
 
 ## Playlist Manager (Web UI)
 
@@ -378,7 +384,7 @@ Open `http://<host>:8080` in your browser, tick/untick screens, set the rotation
 python joan_dashboard.py --playlist=config --active-hours 07:00-21:00
 ```
 
-Selections are saved to `playlist_config.json`. The dashboard reloads this file each rotation cycle, so changes take effect within one interval without restarting the service.
+Selections are saved to `playlist_config.json`. The dashboard reloads this file before each screen render, so changes take effect within one interval without restarting the service.
 
 ## Running as a Service
 
@@ -575,7 +581,22 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 - **Metropolitan Museum of Art API** for artwork
 - **RainViewer API** + **OpenStreetMap** for weather radar
 
-All APIs are free and require no API keys (except Google, which uses OAuth2).
+All APIs are free and require no API keys (except Google OAuth2, TMDB for movies, and Rail Data Marketplace for UK trains).
+
+Additional data sources:
+- **icanhazdadjoke** for dad jokes
+- **Yahoo Finance** for stock prices
+- **TMDB** for upcoming movies (key required)
+- **Rail Data Marketplace** for UK train departures (key required)
+- **RainViewer** + **OpenStreetMap** for weather radar
+- **Sefaria** for Torah wisdom
+- **BBC News API** for headlines
+- **The New Yorker** for daily cartoons (scraped)
+- **Letterboxd** for literate movies (scraped)
+- **Buddha API** for wisdom quotes
+- **gov.uk** for bank holidays
+- **doforce/github-trending** for GitHub trending repos
+- **doodles.google** for Google Doodles
 
 ## License
 
