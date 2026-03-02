@@ -3711,9 +3711,12 @@ def _fetch_movie_details(slug):
     # Title + year
     title = ""
     year = ""
-    tm = re.search(r'<h1[^>]*>([^<]+)</h1>', page)
+    # Title is in <h1><span class="name ...">Title</span></h1>
+    tm = re.search(r'<h1[^>]*>\s*<span[^>]*class="name[^"]*"[^>]*>([^<]+)</span>', page)
+    if not tm:
+        tm = re.search(r'<h1[^>]*>(.*?)</h1>', page, re.DOTALL)
     if tm:
-        title = html_mod.unescape(tm.group(1).strip())
+        title = html_mod.unescape(re.sub(r'<[^>]+>', '', tm.group(1)).strip())
     ym = re.search(r'href="/films/year/(\d{4})/"', page)
     if ym:
         year = ym.group(1)
@@ -3724,11 +3727,17 @@ def _fetch_movie_details(slug):
     if dm:
         director = html_mod.unescape(dm.group(1))
 
-    # OG image (poster)
+    # Poster image (portrait crop, not the landscape og:image)
     poster_url = ""
-    pm = re.search(r'og:image["\s]+content="([^"]+)"', page)
+    pm = re.search(r'(https://a\.ltrbxd\.com/resized/[^"\s]*0-230-0-345[^"\s]*)', page)
     if pm:
-        poster_url = pm.group(1)
+        # Upscale from 230x345 to 500x750 for better quality
+        poster_url = pm.group(1).replace('0-230-0-345', '0-500-0-750')
+    else:
+        # Fallback to og:image
+        pm2 = re.search(r'og:image["\s]+content="([^"]+)"', page)
+        if pm2:
+            poster_url = pm2.group(1)
 
     # Description/tagline
     desc = ""
