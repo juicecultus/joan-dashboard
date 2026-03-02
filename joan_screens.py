@@ -127,11 +127,9 @@ def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 12
 
 def _dashboard_footer(draw):
     """Match the main dashboard footer: location + update time + room/battery."""
-    from joan_dashboard import _active_device_uuid
     footer_left = f"{WEATHER_LOCATION}  ·  Updated {datetime.now().strftime('%H:%M')}"
     draw.text((PAD, HEIGHT - 28), footer_left, fill=160, font=get_font(26), anchor="lm")
     dev = fetch_device_status()
-    print(f"[footer] active_uuid={_active_device_uuid[:12] if _active_device_uuid else 'None'} -> batt={dev.get('battery')} temp={dev.get('temperature')}")
     footer_parts = []
     if dev.get("temperature"):
         footer_parts.append(f"Room {dev['temperature']}°C")

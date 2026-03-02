@@ -18,6 +18,12 @@ import math
 import os
 import sys
 import time
+
+# Prevent double-import: when run as __main__, register this module under its
+# real name so that 'from joan_dashboard import ...' in joan_screens.py reuses
+# the SAME module instance (sharing globals like _active_device_uuid).
+if __name__ == "__main__" and "joan_dashboard" not in sys.modules:
+    sys.modules["joan_dashboard"] = sys.modules["__main__"]
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -800,8 +806,6 @@ def render_and_push_all(render_fn):
         return
     for dev in devices:
         _active_device_uuid = dev["uuid"]
-        status = fetch_device_status()
-        print(f"[render] {dev['name']} uuid={dev['uuid'][:12]} active={_active_device_uuid[:12]} batt={status.get('battery')} temp={status.get('temperature')}")
         img = render_fn()
         push_image(img, dev["uuid"], (dev["width"], dev["height"]))
     _active_device_uuid = None
