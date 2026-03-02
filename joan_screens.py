@@ -3541,21 +3541,27 @@ def render_trains() -> Image.Image:
 
 def _fetch_daily_cartoon():
     """Fetch the latest Daily Cartoon from The New Yorker."""
-    # Get the daily cartoon page to find the latest cartoon link
-    headers = {"User-Agent": "JoanDashboard/1.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux) AppleWebKit/537.36"}
     r = requests.get("https://www.newyorker.com/cartoons/daily-cartoon",
                       headers=headers, timeout=15)
     r.raise_for_status()
-    html = r.text
+    page = r.text
 
-    # Extract og:image (the cartoon image)
-    img_match = re.search(r'og:image["\s]+content="([^"]+)"', html)
-    if not img_match:
-        raise ValueError("No og:image found on cartoon page")
-    img_url = img_match.group(1)
+    # Extract og:image and convert /photos/ to /cartoons/ endpoint
+    # (the /photos/ URL often returns 500, but /cartoons/ works)
+    img_url = ""
+    img_match = re.search(r'og:image["\s]+content="([^"]+)"', page)
+    if img_match:
+        raw_url = img_match.group(1)
+        photo_id = re.search(r'/photos/([a-f0-9]+)/', raw_url)
+        if photo_id:
+            img_url = (f"https://media.newyorker.com/cartoons/"
+                       f"{photo_id.group(1)}/master/w_1600,c_limit/undefined")
+        else:
+            img_url = raw_url
 
-    # Extract the first daily cartoon link (for the detail page)
-    link_match = re.search(r'href="(/cartoons/daily-cartoon/[^"]+)"', html)
+    # Extract the first daily cartoon link (for caption)
+    link_match = re.search(r'href="(/cartoons/daily-cartoon/[^"]+)"', page)
     detail_url = ""
     if link_match:
         detail_url = "https://www.newyorker.com" + link_match.group(1)
@@ -3566,7 +3572,6 @@ def _fetch_daily_cartoon():
         try:
             r2 = requests.get(detail_url, headers=headers, timeout=15)
             r2.raise_for_status()
-            # Caption is typically the first smart-quoted text on the page
             caps = re.findall(r'\u201c([^\u201d]+)\u201d', r2.text)
             if caps:
                 caption = caps[0]
@@ -3574,7 +3579,7 @@ def _fetch_daily_cartoon():
             pass
 
     # Extract title
-    title_match = re.search(r'og:title["\s]+content="([^"]+)"', html)
+    title_match = re.search(r'og:title["\s]+content="([^"]+)"', page)
     title = title_match.group(1) if title_match else "Daily Cartoon"
 
     return {"image_url": img_url, "caption": caption, "title": title}
