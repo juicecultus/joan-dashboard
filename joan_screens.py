@@ -101,6 +101,24 @@ def _cache_fetch(key, ttl, max_stale, fetch_fn):
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+def _wrap_text(font, text, max_width):
+    """Wrap text to fit within max_width using the given font."""
+    words = text.split()
+    lines = []
+    line = ""
+    for word in words:
+        test = f"{line} {word}".strip()
+        if font.getlength(test) > max_width:
+            if line:
+                lines.append(line)
+            line = word
+        else:
+            line = test
+    if line:
+        lines.append(line)
+    return lines
+
+
 def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 120):
     """Draw text centered at y, wrapping if needed. Returns new y."""
     font = get_font(size, bold=bold)

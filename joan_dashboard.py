@@ -916,20 +916,48 @@ def main():
         print(f"[playlist] Rotating {len(screens)} screens, {interval}s each, active {args.active_hours}: {[s[0] for s in screens]}")
         print(f"[devices] Pushing to {len(devices)} device(s): {dev_info}")
 
+        def _render_error_screen(screen_name, error_msg):
+            """Render a minimal error placeholder so the device doesn't show stale content."""
+            img = Image.new("L", (WIDTH, HEIGHT), 255)
+            draw = ImageDraw.Draw(img)
+            draw.text((WIDTH // 2, HEIGHT // 2 - 40), f"Screen: {screen_name}",
+                      fill=100, font=get_font(36, bold=True), anchor="mm")
+            draw.text((WIDTH // 2, HEIGHT // 2 + 20), f"Error: {str(error_msg)[:80]}",
+                      fill=120, font=get_font(28), anchor="mm")
+            draw.text((WIDTH // 2, HEIGHT // 2 + 70), f"Will retry next cycle",
+                      fill=160, font=get_font(24), anchor="mm")
+            return img
+
+        screen_idx = 0
+        _prev_order = None  # track config changes
+
         while True:
-            # Reload config each cycle (web UI changes take effect live)
+            # Reload config BEFORE each screen (changes take effect immediately)
             if args.playlist == "config":
                 screens, cfg_interval = _load_playlist()
                 interval = max(args.loop, cfg_interval) if args.loop else max(cfg_interval, 180)
+                # Detect config changes and log them
+                new_order = [s[0] for s in screens]
+                if _prev_order is not None and new_order != _prev_order:
+                    print(f"[playlist] Config changed: {new_order}")
+                _prev_order = new_order
 
+            if not screens:
+                time.sleep(30)
+                continue
+
+            # Wrap index if playlist shrank or cycled
+            if screen_idx >= len(screens):
+                screen_idx = 0
+
+            # Active hours check
             now_mins = datetime.now().hour * 60 + datetime.now().minute
             if now_mins < active_start or now_mins >= active_end:
-                wake_at = active_start if now_mins >= active_end else active_start
                 now_m = datetime.now().hour * 60 + datetime.now().minute
                 if now_m >= active_end:
-                    sleep_mins = (24 * 60 - now_m) + wake_at
+                    sleep_mins = (24 * 60 - now_m) + active_start
                 else:
-                    sleep_mins = wake_at - now_m
+                    sleep_mins = active_start - now_m
                 # Push sleep screen before sleeping
                 try:
                     from joan_screens import render_sleep_screen
@@ -940,20 +968,23 @@ def main():
                     print(f"[sleep] Failed to render sleep screen: {e}")
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
                 time.sleep(sleep_mins * 60)
+                screen_idx = 0  # restart from first screen on wake
                 continue
 
-            for name, render_fn in screens:
-                # Re-check active hours before each screen
-                now_mins = datetime.now().hour * 60 + datetime.now().minute
-                if now_mins < active_start or now_mins >= active_end:
-                    break
+            name, render_fn = screens[screen_idx]
+            try:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name} ({screen_idx + 1}/{len(screens)})")
+                render_and_push_all(render_fn)
+            except Exception as e:
+                print(f"[{name}] Error: {e}")
                 try:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name}")
-                    render_and_push_all(render_fn)
-                except Exception as e:
-                    print(f"[{name}] Error: {e}")
-                print(f"[playlist] Next screen in {interval}s")
-                time.sleep(interval)
+                    render_and_push_all(lambda: _render_error_screen(name, e))
+                except Exception:
+                    pass  # device unreachable, nothing we can do
+
+            screen_idx += 1
+            print(f"[playlist] Next screen in {interval}s")
+            time.sleep(interval)
         return
 
     # Default: dashboard only
