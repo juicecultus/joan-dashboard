@@ -3620,7 +3620,7 @@ def render_daily_cartoon() -> Image.Image:
         r = requests.get(img_url, timeout=15,
                          headers={"User-Agent": "JoanDashboard/1.0"})
         r.raise_for_status()
-        cartoon = Image.open(io.BytesIO(r.content)).convert("L")
+        cartoon = Image.open(BytesIO(r.content)).convert("L")
 
         # Auto-crop whitespace
         bg = cartoon.getpixel((0, 0))
@@ -3792,7 +3792,7 @@ def render_literate_movies() -> Image.Image:
             rp = requests.get(poster_url, timeout=15,
                               headers={"User-Agent": "JoanDashboard/1.0"})
             rp.raise_for_status()
-            poster = Image.open(io.BytesIO(rp.content)).convert("L")
+            poster = Image.open(BytesIO(rp.content)).convert("L")
             # Scale to fit poster area
             pw, ph = poster.size
             scale = min(poster_w / pw, poster_area_h / ph)
