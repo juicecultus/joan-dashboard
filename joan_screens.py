@@ -3791,9 +3791,9 @@ def render_literate_movies() -> Image.Image:
     poster_url = movie.get("poster_url", "")
 
     # Layout: poster on left, info on right
-    poster_w = 340
+    poster_w = 450
     poster_area_h = HEIGHT - 120  # leave room for footer
-    info_x = poster_w + PAD + 30
+    info_x = poster_w + PAD + 40
 
     # Fetch and render poster
     if poster_url:
