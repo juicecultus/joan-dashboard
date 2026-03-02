@@ -3723,7 +3723,7 @@ def _fetch_movie_details(slug):
 
     # Director
     director = ""
-    dm = re.search(r'<a[^>]*href="/director/[^"]*"[^>]*><span>([^<]+)</span></a>', page)
+    dm = re.search(r'<a[^>]*href="/director/[^"]*"[^>]*><span[^>]*>([^<]+)</span></a>', page)
     if dm:
         director = html_mod.unescape(dm.group(1))
 
