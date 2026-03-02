@@ -53,6 +53,9 @@ SCREEN_CATALOG = [
     ("torah",      "Torah Wisdom",          "Daily verse from Proverbs/Psalms/Ecclesiastes"),
     ("bbc",        "BBC News",              "Top BBC stories with images and headlines"),
     ("element",    "Element of the Day",    "Daily periodic table element with properties"),
+    ("cartoon",    "Daily Cartoon",         "The New Yorker's Daily Cartoon with caption"),
+    ("litmovies",  "Literate Movies",       "Daily film from Letterboxd literate movies list"),
+    ("buddha",     "Buddha Quote",          "Wisdom quote from Buddha"),
 ]
 
 

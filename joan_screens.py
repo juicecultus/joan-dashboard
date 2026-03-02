@@ -60,9 +60,10 @@ def _get_hebrew_font(size: int) -> ImageFont.FreeTypeFont:
         candidates = [
             "/Library/Fonts/Arial Unicode.ttf",
             "/System/Library/Fonts/Supplemental/Raanana.ttc",
-            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
         ]
         for path in candidates:
             try:
@@ -3291,16 +3292,15 @@ _CRS_NAMES = {
 }
 
 
-def _fetch_trains_from(station, dest=None):
-    """Fetch live departures from a single station via LDBWS API."""
+def _fetch_trains():
+    """Fetch live departures from the configured station via LDBWS API."""
+    if not TRAINS_API_KEY:
+        return None
     url = (
         f"https://api1.raildata.org.uk/1010-live-departure-board-dep1_2"
-        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{station}"
+        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}"
     )
     params = {"numRows": 10}
-    if dest:
-        params["filterCrs"] = dest
-        params["filterType"] = "to"
     headers = {
         "x-apikey": TRAINS_API_KEY,
         "User-Agent": "JoanDashboard/1.0",
@@ -3309,59 +3309,6 @@ def _fetch_trains_from(station, dest=None):
     r = requests.get(url, params=params, headers=headers, timeout=10)
     r.raise_for_status()
     return r.json()
-
-
-# Nearby stations to also query (e.g. AVP is terminus, AYS has more services)
-_NEARBY_STATIONS = {
-    "AVP": ["AYS"],   # Aylesbury Vale Parkway → also check Aylesbury
-    "AYS": ["AVP"],   # Aylesbury → also check Aylesbury Vale Parkway
-}
-
-
-def _fetch_trains():
-    """Fetch departures from primary + nearby stations, merge and deduplicate."""
-    if not TRAINS_API_KEY:
-        return None
-    dest = TRAINS_DESTINATION or None
-    primary = TRAINS_STATION
-
-    # Fetch primary station (all departures)
-    result = _fetch_trains_from(primary)
-    all_services = []
-    for svc in (result.get("trainServices") or []):
-        svc["_from_station"] = primary
-        all_services.append(svc)
-
-    # Fetch nearby stations (filtered to destination only)
-    nearby = _NEARBY_STATIONS.get(primary, [])
-    for stn in nearby:
-        if dest:
-            try:
-                extra = _fetch_trains_from(stn, dest)
-                for svc in (extra.get("trainServices") or []):
-                    svc["_from_station"] = stn
-                    all_services.append(svc)
-            except Exception as e:
-                print(f"[trains] Failed to fetch {stn}: {e}")
-
-    # Deduplicate by serviceID (same train may appear at both stations)
-    seen = set()
-    unique = []
-    for svc in all_services:
-        sid = svc.get("serviceID", "")
-        if sid and sid in seen:
-            continue
-        if sid:
-            seen.add(sid)
-        unique.append(svc)
-
-    # Sort by scheduled departure time
-    unique.sort(key=lambda s: s.get("std", "99:99"))
-
-    # Return merged result with original structure
-    result["trainServices"] = unique[:10]
-    result["_merged_stations"] = [primary] + nearby
-    return result
 
 
 def _minutes_until(time_str):
@@ -3391,19 +3338,8 @@ def render_trains() -> Image.Image:
     # --- Header bar ---
     header_h = 90
     draw.rectangle([0, 0, WIDTH, header_h], fill=30)
-    # Show merged stations if applicable
-    merged = data.get("_merged_stations", []) if data else []
-    if len(merged) > 1:
-        names = [_CRS_NAMES.get(s, s) for s in merged]
-        hdr_title = f"Departures — {' & '.join(names)}"
-    else:
-        hdr_title = f"Live Departures — {station_name}"
-    # Auto-size header font to fit
-    hdr_size = 42
-    while get_font(hdr_size, bold=True).getlength(hdr_title) > WIDTH - PAD * 2 - 120 and hdr_size > 28:
-        hdr_size -= 2
-    draw.text((PAD, header_h // 2), hdr_title,
-              fill=240, font=get_font(hdr_size, bold=True), anchor="lm")
+    draw.text((PAD, header_h // 2), f"Live Departures — {station_name}",
+              fill=240, font=get_font(42, bold=True), anchor="lm")
     now_str = datetime.now().strftime("%H:%M")
     draw.text((WIDTH - PAD, header_h // 2), now_str,
               fill=200, font=get_font(38, bold=True), anchor="rm")
@@ -3461,14 +3397,13 @@ def render_trains() -> Image.Image:
         # Minutes until departure
         dep_time = etd if etd not in ("On time", "Cancelled", "Delayed", "") else std
         mins = _minutes_until(dep_time)
-        from_stn = svc.get("_from_station", TRAINS_STATION)
         services.append({
             "time": std, "due": etd, "platform": platform,
             "destination": dest_name, "via": via,
             "operator": operator, "operator_code": operator_code,
             "length": length, "cancelled": is_cancelled,
             "calling_points": calling_points, "arrival": arr_time,
-            "mins": mins, "from_station": from_stn,
+            "mins": mins,
         })
 
     if not services:
@@ -3532,10 +3467,8 @@ def render_trains() -> Image.Image:
                 dest_str += f"  {svc['via']}"
             draw.text((PAD + 20, r2y), dest_str, fill=0, font=get_font(34, bold=True), anchor="lt")
 
-            # Operator + coaches + station (right-aligned)
+            # Operator + coaches (right-aligned)
             info_parts = []
-            if svc["from_station"] != TRAINS_STATION:
-                info_parts.append(f"from {_CRS_NAMES.get(svc['from_station'], svc['from_station'])}")
             if svc["operator"]:
                 info_parts.append(svc["operator"])
             if svc["length"] and svc["length"] > 0:
@@ -3590,11 +3523,8 @@ def render_trains() -> Image.Image:
             if len(dest_str) > 28:
                 dest_str = dest_str[:26] + "…"
             draw.text((PAD + 540, cy_r), dest_str, fill=0, font=get_font(32, bold=True), anchor="lm")
-            # Station label + operator
-            right_label = svc["operator_code"]
-            if svc["from_station"] != TRAINS_STATION:
-                right_label = svc["from_station"] + " " + right_label
-            draw.text((WIDTH - PAD - 10, cy_r), right_label, fill=100, font=get_font(28), anchor="rm")
+            # Operator code
+            draw.text((WIDTH - PAD - 10, cy_r), svc["operator_code"], fill=100, font=get_font(28), anchor="rm")
             # Row separator
             if i < len(services) - 1:
                 sep_y = ry + row_h - 3
@@ -3603,6 +3533,374 @@ def render_trains() -> Image.Image:
 
     # --- Footer ---
     _dashboard_footer(draw)
+
+    return img
+
+
+# ── Daily Cartoon (The New Yorker) ────────────────────────────────────
+
+def _fetch_daily_cartoon():
+    """Fetch the latest Daily Cartoon from The New Yorker."""
+    # Get the daily cartoon page to find the latest cartoon link
+    headers = {"User-Agent": "JoanDashboard/1.0"}
+    r = requests.get("https://www.newyorker.com/cartoons/daily-cartoon",
+                      headers=headers, timeout=15)
+    r.raise_for_status()
+    html = r.text
+
+    # Extract og:image (the cartoon image)
+    img_match = re.search(r'og:image["\s]+content="([^"]+)"', html)
+    if not img_match:
+        raise ValueError("No og:image found on cartoon page")
+    img_url = img_match.group(1)
+
+    # Extract the first daily cartoon link (for the detail page)
+    link_match = re.search(r'href="(/cartoons/daily-cartoon/[^"]+)"', html)
+    detail_url = ""
+    if link_match:
+        detail_url = "https://www.newyorker.com" + link_match.group(1)
+
+    # Extract caption from the detail page (smart-quoted text)
+    caption = ""
+    if detail_url:
+        try:
+            r2 = requests.get(detail_url, headers=headers, timeout=15)
+            r2.raise_for_status()
+            # Caption is typically the first smart-quoted text on the page
+            caps = re.findall(r'\u201c([^\u201d]+)\u201d', r2.text)
+            if caps:
+                caption = caps[0]
+        except Exception:
+            pass
+
+    # Extract title
+    title_match = re.search(r'og:title["\s]+content="([^"]+)"', html)
+    title = title_match.group(1) if title_match else "Daily Cartoon"
+
+    return {"image_url": img_url, "caption": caption, "title": title}
+
+
+def render_daily_cartoon() -> Image.Image:
+    """Render The New Yorker's Daily Cartoon with auto-cropped whitespace."""
+    from PIL import ImageOps
+    img = Image.new("L", (WIDTH, HEIGHT), 230)
+    draw = ImageDraw.Draw(img)
+
+    data = _cache_fetch("newyorker_cartoon", 43200, 172800, _fetch_daily_cartoon)
+
+    if not data:
+        _centered_text(draw, HEIGHT // 2, "No cartoon available", 40, fill=80)
+        _footer(draw, now_str())
+        return img
+
+    caption = data.get("caption", "")
+    title = data.get("title", "Daily Cartoon")
+
+    # Reserve space for caption at bottom
+    caption_h = 0
+    caption_lines = []
+    if caption:
+        cap_font = get_font(36)
+        caption_lines = _wrap_text(cap_font, f'"{caption}"', WIDTH - PAD * 2 - 40)
+        caption_h = len(caption_lines) * 48 + 30
+
+    footer_h = 50
+    footer_y = HEIGHT - footer_h
+    caption_area_top = footer_y - caption_h
+    img_area_h = caption_area_top - 20  # image area height
+
+    # Fetch and process the cartoon image
+    try:
+        img_url = data["image_url"]
+        r = requests.get(img_url, timeout=15,
+                         headers={"User-Agent": "JoanDashboard/1.0"})
+        r.raise_for_status()
+        cartoon = Image.open(io.BytesIO(r.content)).convert("L")
+
+        # Auto-crop whitespace
+        bg = cartoon.getpixel((0, 0))
+        threshold = 20
+        pixels = cartoon.load()
+        w, h = cartoon.size
+        top, bottom, left, right = h, 0, w, 0
+        for y_px in range(h):
+            for x_px in range(w):
+                if abs(pixels[x_px, y_px] - bg) > threshold:
+                    top = min(top, y_px)
+                    bottom = max(bottom, y_px)
+                    left = min(left, x_px)
+                    right = max(right, x_px)
+        if bottom > top and right > left:
+            margin = 10
+            cartoon = cartoon.crop((max(0, left - margin), max(0, top - margin),
+                                    min(w, right + margin), min(h, bottom + margin)))
+
+        # Scale to fit the available area
+        cw, ch = cartoon.size
+        scale = min((WIDTH - PAD * 2) / cw, img_area_h / ch)
+        new_w, new_h = int(cw * scale), int(ch * scale)
+        cartoon = cartoon.resize((new_w, new_h), Image.LANCZOS)
+
+        # Center the cartoon
+        x_off = (WIDTH - new_w) // 2
+        y_off = max(10, (img_area_h - new_h) // 2)
+        img.paste(cartoon, (x_off, y_off))
+    except Exception as e:
+        _centered_text(draw, HEIGHT // 3, f"Image load failed: {str(e)[:60]}", 28, fill=100)
+
+    # Draw caption
+    if caption_lines:
+        cap_font = get_font(36)
+        cy = caption_area_top + 15
+        for ln in caption_lines:
+            draw.text((WIDTH // 2, cy), ln, fill=30, font=cap_font, anchor="mt")
+            cy += 48
+
+    # Footer
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=200)
+    draw.text((PAD + 10, footer_y + footer_h // 2), "The New Yorker — Daily Cartoon",
+              fill=60, font=get_font(24, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD - 10, footer_y + footer_h // 2), now_str(),
+              fill=80, font=get_font(24), anchor="rm")
+
+    return img
+
+
+# ── Literate Movies (Letterboxd) ─────────────────────────────────────
+
+LETTERBOXD_LIST_URL = "https://letterboxd.com/shawn_stubbs/list/literate-movies/"
+
+
+def _fetch_literate_movies():
+    """Fetch the full list of movie slugs from the Letterboxd list."""
+    headers = {"User-Agent": "JoanDashboard/1.0"}
+    all_slugs = []
+    # Fetch page 1 to discover total pages
+    r = requests.get(LETTERBOXD_LIST_URL, headers=headers, timeout=15)
+    r.raise_for_status()
+    slugs = re.findall(r'data-target-link="/film/([^/]+)/"', r.text)
+    all_slugs.extend(slugs)
+    pages = re.findall(r'/page/(\d+)/', r.text)
+    max_page = max(int(p) for p in pages) if pages else 1
+    # Fetch remaining pages (cap at 5 pages = 500 movies to keep it fast)
+    for pg in range(2, min(max_page + 1, 6)):
+        try:
+            r2 = requests.get(f"{LETTERBOXD_LIST_URL}page/{pg}/",
+                              headers=headers, timeout=10)
+            r2.raise_for_status()
+            all_slugs.extend(re.findall(r'data-target-link="/film/([^/]+)/"', r2.text))
+        except Exception:
+            break
+    return all_slugs
+
+
+def _fetch_movie_details(slug):
+    """Fetch movie details from Letterboxd film page + TMDB poster."""
+    headers = {"User-Agent": "JoanDashboard/1.0"}
+    url = f"https://letterboxd.com/film/{slug}/"
+    import html as html_mod
+    r = requests.get(url, headers=headers, timeout=15)
+    r.raise_for_status()
+    page = r.text
+
+    # Title + year
+    title = ""
+    year = ""
+    tm = re.search(r'<h1[^>]*>([^<]+)</h1>', page)
+    if tm:
+        title = html_mod.unescape(tm.group(1).strip())
+    ym = re.search(r'href="/films/year/(\d{4})/"', page)
+    if ym:
+        year = ym.group(1)
+
+    # Director
+    director = ""
+    dm = re.search(r'<a[^>]*href="/director/[^"]*"[^>]*><span>([^<]+)</span></a>', page)
+    if dm:
+        director = html_mod.unescape(dm.group(1))
+
+    # OG image (poster)
+    poster_url = ""
+    pm = re.search(r'og:image["\s]+content="([^"]+)"', page)
+    if pm:
+        poster_url = pm.group(1)
+
+    # Description/tagline
+    desc = ""
+    desc_m = re.search(r'<meta[^>]*name="description"[^>]*content="([^"]+)"', page)
+    if desc_m:
+        desc = html_mod.unescape(desc_m.group(1).strip())
+        # Trim to reasonable length
+        if len(desc) > 200:
+            desc = desc[:197].rstrip() + "..."
+
+    # Cast
+    cast = []
+    cast_matches = re.findall(r'<a[^>]*href="/actor/[^"]*"[^>]*>([^<]+)</a>', page)
+    cast = [html_mod.unescape(c.strip()) for c in cast_matches[:5]]
+
+    return {
+        "title": title, "year": year, "director": director,
+        "poster_url": poster_url, "desc": desc, "cast": cast,
+        "slug": slug,
+    }
+
+
+def render_literate_movies() -> Image.Image:
+    """Show a movie from the Literate Movies Letterboxd list, rotating daily."""
+    from PIL import ImageOps
+    img = Image.new("L", (WIDTH, HEIGHT), 230)
+    draw = ImageDraw.Draw(img)
+
+    # Get list of all movie slugs (cached 24h)
+    slugs = _cache_fetch("literate_movies_list", 86400, 604800, _fetch_literate_movies)
+    if not slugs:
+        _centered_text(draw, HEIGHT // 2, "No movies available", 40, fill=80)
+        return img
+
+    # Pick movie based on day of year
+    day = datetime.now().timetuple().tm_yday
+    slug = slugs[day % len(slugs)]
+
+    # Get movie details (cached 7 days)
+    movie = _cache_fetch(f"litmovie:{slug}", 604800, 2592000,
+                         lambda: _fetch_movie_details(slug))
+    if not movie:
+        _centered_text(draw, HEIGHT // 2, "Movie details unavailable", 40, fill=80)
+        return img
+
+    title = movie.get("title", slug.replace("-", " ").title())
+    year = movie.get("year", "")
+    director = movie.get("director", "")
+    desc = movie.get("desc", "")
+    cast = movie.get("cast", [])
+    poster_url = movie.get("poster_url", "")
+
+    # Layout: poster on left, info on right
+    poster_w = 340
+    poster_area_h = HEIGHT - 120  # leave room for footer
+    info_x = poster_w + PAD + 30
+
+    # Fetch and render poster
+    if poster_url:
+        try:
+            rp = requests.get(poster_url, timeout=15,
+                              headers={"User-Agent": "JoanDashboard/1.0"})
+            rp.raise_for_status()
+            poster = Image.open(io.BytesIO(rp.content)).convert("L")
+            # Scale to fit poster area
+            pw, ph = poster.size
+            scale = min(poster_w / pw, poster_area_h / ph)
+            new_w, new_h = int(pw * scale), int(ph * scale)
+            poster = poster.resize((new_w, new_h), Image.LANCZOS)
+            img.paste(poster, (PAD, (poster_area_h - new_h) // 2 + 20))
+        except Exception:
+            draw.rectangle([PAD, 20, PAD + poster_w, poster_area_h],
+                          fill=200, outline=180)
+
+    # Title + year
+    title_str = f"{title} ({year})" if year else title
+    title_font = get_font(38, bold=True)
+    title_lines = _wrap_text(title_font, title_str, WIDTH - info_x - PAD)
+    ty = 40
+    for ln in title_lines[:3]:
+        draw.text((info_x, ty), ln, fill=0, font=title_font, anchor="lt")
+        ty += 50
+
+    ty += 15
+    # Director
+    if director:
+        draw.text((info_x, ty), f"Directed by {director}",
+                  fill=60, font=get_font(28), anchor="lt")
+        ty += 40
+
+    # Cast
+    if cast:
+        ty += 10
+        cast_str = ", ".join(cast)
+        cast_font = get_font(26)
+        cast_lines = _wrap_text(cast_font, f"Starring {cast_str}", WIDTH - info_x - PAD)
+        for ln in cast_lines[:3]:
+            draw.text((info_x, ty), ln, fill=80, font=cast_font, anchor="lt")
+            ty += 34
+
+    # Description
+    if desc:
+        ty += 20
+        desc_font = get_font(26)
+        desc_lines = _wrap_text(desc_font, desc, WIDTH - info_x - PAD)
+        for ln in desc_lines[:6]:
+            draw.text((info_x, ty), ln, fill=50, font=desc_font, anchor="lt")
+            ty += 34
+
+    # Footer bar
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=190)
+    draw.text((PAD + 10, footer_y + footer_h // 2), "Literate Movies",
+              fill=40, font=get_font(28, bold=True), anchor="lm")
+    draw.text((WIDTH - PAD - 10, footer_y + footer_h // 2),
+              f"#{(day % len(slugs)) + 1} of {len(slugs)}",
+              fill=80, font=get_font(24), anchor="rm")
+
+    return img
+
+
+# ── Buddha Quotes ────────────────────────────────────────────────────
+
+def _fetch_buddha_quote():
+    """Fetch a random Buddha quote from buddha-api.com."""
+    r = requests.get("https://buddha-api.com/api/random", timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    return {"text": data.get("text", ""), "by": data.get("byName", "Buddha")}
+
+
+def render_buddha_quote() -> Image.Image:
+    """Render a Buddha quote in a serene, minimalist layout."""
+    img = Image.new("L", (WIDTH, HEIGHT), 240)
+    draw = ImageDraw.Draw(img)
+
+    quote = _cache_fetch("buddha_quote", 43200, 172800, _fetch_buddha_quote)
+
+    # Decorative top line
+    line_y = 60
+    draw.line([(PAD + 80, line_y), (WIDTH - PAD - 80, line_y)], fill=180, width=2)
+
+    # Title
+    draw.text((WIDTH // 2, line_y + 30), "Buddha", fill=100,
+              font=get_font(32, bold=True), anchor="mt")
+
+    if not quote:
+        _centered_text(draw, HEIGHT // 2, "No quote available", 36, fill=100)
+        _footer(draw, now_str())
+        return img
+
+    text = quote.get("text", "")
+    by = quote.get("by", "Buddha")
+
+    # Large opening quote mark
+    draw.text((PAD + 40, 150), "\u201c", fill=180, font=get_font(120), anchor="lt")
+
+    # Quote text — centered, large
+    quote_font = get_font(44)
+    max_w = WIDTH - PAD * 2 - 120
+    lines = _wrap_text(quote_font, text, max_w)
+    lines = lines[:8]  # cap at 8 lines
+
+    total_h = len(lines) * 60
+    start_y = max(200, (HEIGHT - 100 - total_h) // 2)
+    for ln in lines:
+        draw.text((WIDTH // 2, start_y), ln, fill=20, font=quote_font, anchor="mt")
+        start_y += 60
+
+    # Closing quote + attribution
+    draw.text((WIDTH // 2, start_y + 20), f"\u2014 {by}", fill=100,
+              font=get_font(30), anchor="mt")
+
+    # Decorative bottom line
+    draw.line([(PAD + 80, HEIGHT - 80), (WIDTH - PAD - 80, HEIGHT - 80)],
+              fill=180, width=2)
 
     return img
 
@@ -3647,4 +3945,7 @@ ALL_SCREENS = {
     "torah": render_torah_wisdom,
     "bbc": render_bbc_news,
     "element": render_element_of_day,
+    "cartoon": render_daily_cartoon,
+    "litmovies": render_literate_movies,
+    "buddha": render_buddha_quote,
 }
