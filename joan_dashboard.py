@@ -663,6 +663,7 @@ def _refresh_device_status_cache():
         r = s.get(f"{base_url}/api/device/", timeout=5)
         if r.status_code == 200:
             new_cache = {}
+            temps = []
             for d in r.json():
                 uuid = d.get("Uuid")
                 status = d.get("Status", {})
@@ -671,6 +672,18 @@ def _refresh_device_status_cache():
                         "battery": status.get("Battery"),
                         "temperature": status.get("Temperature"),
                     }
+                    t = status.get("Temperature")
+                    if t is not None:
+                        try:
+                            temps.append(int(t))
+                        except (ValueError, TypeError):
+                            pass
+            # Use lowest device temperature as room temp (charging devices
+            # read high due to internal heat; the coolest sensor is most
+            # accurate for ambient room temperature).
+            room_temp = str(min(temps)) if temps else None
+            for entry in new_cache.values():
+                entry["room_temperature"] = room_temp
             _device_status_cache = new_cache
             _device_status_ts = now
         elif r.status_code in (401, 403):
@@ -682,7 +695,11 @@ def _refresh_device_status_cache():
 
 
 def fetch_device_status() -> dict:
-    """Fetch battery and temperature for the active device.
+    """Fetch battery and room temperature for the active device.
+
+    Battery is per-device. Room temperature is shared across all devices
+    (uses the lowest sensor reading to avoid inflated readings from
+    charging devices).
 
     Uses _active_device_uuid when set (multi-device rendering),
     otherwise falls back to DEVICE_UUID (first configured device).
@@ -692,7 +709,11 @@ def fetch_device_status() -> dict:
     uuid = _active_device_uuid or DEVICE_UUID
     if not uuid:
         return {"battery": None, "temperature": None}
-    return _device_status_cache.get(uuid, {"battery": None, "temperature": None})
+    entry = _device_status_cache.get(uuid, {})
+    return {
+        "battery": entry.get("battery"),
+        "temperature": entry.get("room_temperature"),
+    }
 
 
 def discover_devices() -> list:
