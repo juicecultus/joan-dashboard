@@ -3285,7 +3285,11 @@ def _fetch_trains():
     if TRAINS_DESTINATION:
         params["filterCrs"] = TRAINS_DESTINATION
         params["filterType"] = "to"
-    headers = {"x-apikey": TRAINS_API_KEY}
+    headers = {
+        "x-apikey": TRAINS_API_KEY,
+        "User-Agent": "JoanDashboard/1.0",
+        "Accept": "application/json",
+    }
     r = requests.get(url, params=params, headers=headers, timeout=10)
     r.raise_for_status()
     return r.json()
