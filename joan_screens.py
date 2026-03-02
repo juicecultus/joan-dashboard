@@ -3278,7 +3278,7 @@ def _fetch_trains():
     if not TRAINS_API_KEY:
         return None
     url = (
-        f"https://api1.raildata.org.uk/1010-live-departure-board-dep"
+        f"https://api1.raildata.org.uk/1010-live-departure-board-dep1_2"
         f"/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}"
     )
     params = {"numRows": 10}
