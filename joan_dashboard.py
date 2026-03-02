@@ -618,46 +618,75 @@ def render_dashboard() -> Image.Image:
 # --- VSS communication ---
 _active_device_uuid = None  # set per-device before rendering for correct footer
 
+# Session cache: reuse a single authenticated session instead of logging in
+# for every API call (previously created 128+ sessions per playlist cycle).
+_vss_session = None
+_vss_session_ts = 0
+_VSS_SESSION_TTL = 300  # reuse session for 5 minutes
 
-def fetch_device_status() -> dict:
-    """Fetch battery and temperature from the VSS device API.
+# Device status cache: fetch device list once per render cycle, not per screen.
+_device_status_cache = {}   # uuid -> {"battery": ..., "temperature": ...}
+_device_status_ts = 0
+_DEVICE_STATUS_TTL = 30     # refresh every 30s (well within 3-min heartbeat)
 
-    Uses _active_device_uuid when set (multi-device rendering),
-    otherwise falls back to DEVICE_UUID (first configured device).
-    """
-    result = {"battery": None, "temperature": None}
-    uuid = _active_device_uuid or DEVICE_UUID
-    if not uuid:
-        return result
+
+def get_session(base_url: str) -> requests.Session:
+    """Get an authenticated VSS session (cached, reused for 5 min)."""
+    global _vss_session, _vss_session_ts
+    now = time.time()
+    if _vss_session and (now - _vss_session_ts) < _VSS_SESSION_TTL:
+        return _vss_session
+    s = requests.Session()
+    r = s.post(f"{base_url}/login", data={"username": VSS_USER, "password": VSS_PASS}, allow_redirects=False)
+    if r.status_code not in (200, 302):
+        raise RuntimeError(f"VSS login failed: {r.status_code}")
+    _vss_session = s
+    _vss_session_ts = now
+    return s
+
+
+def _refresh_device_status_cache():
+    """Fetch all device statuses from VSS and cache them."""
+    global _device_status_cache, _device_status_ts
+    now = time.time()
+    if _device_status_cache and (now - _device_status_ts) < _DEVICE_STATUS_TTL:
+        return
     try:
         base_url = f"http://{VSS_HOST}:{VSS_PORT}"
         s = get_session(base_url)
         r = s.get(f"{base_url}/api/device/", timeout=5)
         if r.status_code == 200:
-            data = r.json()
-            status = None
-            if isinstance(data, list):
-                for d in data:
-                    if d.get("Uuid") == uuid:
-                        status = d.get("Status", {})
-                        break
-            elif isinstance(data, dict):
-                status = data.get("Status", {})
-            if status:
-                result["battery"] = status.get("Battery")
-                result["temperature"] = status.get("Temperature")
+            new_cache = {}
+            for d in r.json():
+                uuid = d.get("Uuid")
+                status = d.get("Status", {})
+                if uuid:
+                    new_cache[uuid] = {
+                        "battery": status.get("Battery"),
+                        "temperature": status.get("Temperature"),
+                    }
+            _device_status_cache = new_cache
+            _device_status_ts = now
+        elif r.status_code in (401, 403):
+            # Session expired, force re-login next call
+            global _vss_session
+            _vss_session = None
     except Exception as e:
-        print(f"[device_status] Failed: {e}")
-    return result
+        print(f"[device_status] Refresh failed: {e}")
 
 
-def get_session(base_url: str) -> requests.Session:
-    """Create an authenticated session with VSS."""
-    s = requests.Session()
-    r = s.post(f"{base_url}/login", data={"username": VSS_USER, "password": VSS_PASS}, allow_redirects=False)
-    if r.status_code not in (200, 302):
-        raise RuntimeError(f"VSS login failed: {r.status_code}")
-    return s
+def fetch_device_status() -> dict:
+    """Fetch battery and temperature for the active device.
+
+    Uses _active_device_uuid when set (multi-device rendering),
+    otherwise falls back to DEVICE_UUID (first configured device).
+    Results are cached per render cycle to avoid excessive API calls.
+    """
+    _refresh_device_status_cache()
+    uuid = _active_device_uuid or DEVICE_UUID
+    if not uuid:
+        return {"battery": None, "temperature": None}
+    return _device_status_cache.get(uuid, {"battery": None, "temperature": None})
 
 
 def discover_devices() -> list:
