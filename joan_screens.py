@@ -3273,15 +3273,16 @@ _CRS_NAMES = {
 }
 
 
-def _fetch_trains():
-    """Fetch live departures from Rail Data Marketplace API (all departures)."""
-    if not TRAINS_API_KEY:
-        return None
+def _fetch_trains_from(station, dest=None):
+    """Fetch live departures from a single station via LDBWS API."""
     url = (
         f"https://api1.raildata.org.uk/1010-live-departure-board-dep1_2"
-        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}"
+        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{station}"
     )
     params = {"numRows": 10}
+    if dest:
+        params["filterCrs"] = dest
+        params["filterType"] = "to"
     headers = {
         "x-apikey": TRAINS_API_KEY,
         "User-Agent": "JoanDashboard/1.0",
@@ -3290,6 +3291,59 @@ def _fetch_trains():
     r = requests.get(url, params=params, headers=headers, timeout=10)
     r.raise_for_status()
     return r.json()
+
+
+# Nearby stations to also query (e.g. AVP is terminus, AYS has more services)
+_NEARBY_STATIONS = {
+    "AVP": ["AYS"],   # Aylesbury Vale Parkway → also check Aylesbury
+    "AYS": ["AVP"],   # Aylesbury → also check Aylesbury Vale Parkway
+}
+
+
+def _fetch_trains():
+    """Fetch departures from primary + nearby stations, merge and deduplicate."""
+    if not TRAINS_API_KEY:
+        return None
+    dest = TRAINS_DESTINATION or None
+    primary = TRAINS_STATION
+
+    # Fetch primary station (all departures)
+    result = _fetch_trains_from(primary)
+    all_services = []
+    for svc in (result.get("trainServices") or []):
+        svc["_from_station"] = primary
+        all_services.append(svc)
+
+    # Fetch nearby stations (filtered to destination only)
+    nearby = _NEARBY_STATIONS.get(primary, [])
+    for stn in nearby:
+        if dest:
+            try:
+                extra = _fetch_trains_from(stn, dest)
+                for svc in (extra.get("trainServices") or []):
+                    svc["_from_station"] = stn
+                    all_services.append(svc)
+            except Exception as e:
+                print(f"[trains] Failed to fetch {stn}: {e}")
+
+    # Deduplicate by serviceID (same train may appear at both stations)
+    seen = set()
+    unique = []
+    for svc in all_services:
+        sid = svc.get("serviceID", "")
+        if sid and sid in seen:
+            continue
+        if sid:
+            seen.add(sid)
+        unique.append(svc)
+
+    # Sort by scheduled departure time
+    unique.sort(key=lambda s: s.get("std", "99:99"))
+
+    # Return merged result with original structure
+    result["trainServices"] = unique[:10]
+    result["_merged_stations"] = [primary] + nearby
+    return result
 
 
 def _minutes_until(time_str):
@@ -3319,8 +3373,19 @@ def render_trains() -> Image.Image:
     # --- Header bar ---
     header_h = 90
     draw.rectangle([0, 0, WIDTH, header_h], fill=30)
-    draw.text((PAD, header_h // 2), f"Live Departures — {station_name}",
-              fill=240, font=get_font(42, bold=True), anchor="lm")
+    # Show merged stations if applicable
+    merged = data.get("_merged_stations", []) if data else []
+    if len(merged) > 1:
+        names = [_CRS_NAMES.get(s, s) for s in merged]
+        hdr_title = f"Departures — {' & '.join(names)}"
+    else:
+        hdr_title = f"Live Departures — {station_name}"
+    # Auto-size header font to fit
+    hdr_size = 42
+    while get_font(hdr_size, bold=True).getlength(hdr_title) > WIDTH - PAD * 2 - 120 and hdr_size > 28:
+        hdr_size -= 2
+    draw.text((PAD, header_h // 2), hdr_title,
+              fill=240, font=get_font(hdr_size, bold=True), anchor="lm")
     now_str = datetime.now().strftime("%H:%M")
     draw.text((WIDTH - PAD, header_h // 2), now_str,
               fill=200, font=get_font(38, bold=True), anchor="rm")
@@ -3378,13 +3443,14 @@ def render_trains() -> Image.Image:
         # Minutes until departure
         dep_time = etd if etd not in ("On time", "Cancelled", "Delayed", "") else std
         mins = _minutes_until(dep_time)
+        from_stn = svc.get("_from_station", TRAINS_STATION)
         services.append({
             "time": std, "due": etd, "platform": platform,
             "destination": dest_name, "via": via,
             "operator": operator, "operator_code": operator_code,
             "length": length, "cancelled": is_cancelled,
             "calling_points": calling_points, "arrival": arr_time,
-            "mins": mins,
+            "mins": mins, "from_station": from_stn,
         })
 
     if not services:
@@ -3448,8 +3514,10 @@ def render_trains() -> Image.Image:
                 dest_str += f"  {svc['via']}"
             draw.text((PAD + 20, r2y), dest_str, fill=0, font=get_font(34, bold=True), anchor="lt")
 
-            # Operator + coaches (right-aligned)
+            # Operator + coaches + station (right-aligned)
             info_parts = []
+            if svc["from_station"] != TRAINS_STATION:
+                info_parts.append(f"from {_CRS_NAMES.get(svc['from_station'], svc['from_station'])}")
             if svc["operator"]:
                 info_parts.append(svc["operator"])
             if svc["length"] and svc["length"] > 0:
@@ -3501,11 +3569,14 @@ def render_trains() -> Image.Image:
             dest_str = svc["destination"]
             if svc["via"]:
                 dest_str += f" {svc['via']}"
-            if len(dest_str) > 30:
-                dest_str = dest_str[:28] + "…"
+            if len(dest_str) > 28:
+                dest_str = dest_str[:26] + "…"
             draw.text((PAD + 540, cy_r), dest_str, fill=0, font=get_font(32, bold=True), anchor="lm")
-            # Operator
-            draw.text((WIDTH - PAD - 10, cy_r), svc["operator_code"], fill=100, font=get_font(28), anchor="rm")
+            # Station label + operator
+            right_label = svc["operator_code"]
+            if svc["from_station"] != TRAINS_STATION:
+                right_label = svc["from_station"] + " " + right_label
+            draw.text((WIDTH - PAD - 10, cy_r), right_label, fill=100, font=get_font(28), anchor="rm")
             # Row separator
             if i < len(services) - 1:
                 sep_y = ry + row_h - 3
