@@ -670,10 +670,13 @@ class _ImageHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "No image available yet")
                 return
+        # Use file mtime as cache-buster so WebKit fetches the fresh PNG
+        mtime = int(os.path.getmtime(os.path.join(_SERVE_DIR, png_name)))
         html = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
-                f'<style>*{{margin:0;padding:0}}body{{overflow:hidden}}'
-                f'img{{width:100vw;height:100vh;object-fit:contain}}</style></head>'
-                f'<body><img src="/{png_name}"></body></html>')
+                f'<meta name="viewport" content="width=1600,height=1200,initial-scale=1">'
+                f'<style>*{{margin:0;padding:0}}body{{overflow:hidden;background:#fff}}'
+                f'img{{display:block;width:1600px;height:1200px}}</style></head>'
+                f'<body><img src="/{png_name}?v={mtime}"></body></html>')
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-cache, no-store")
