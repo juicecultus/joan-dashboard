@@ -658,25 +658,27 @@ class _ImageHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404)
             return
-        # Serve HTML page that displays the image full-screen
+        # Serve HTML page with the image embedded as base64 data URI.
+        # This avoids a second HTTP request that WebKit can't complete
+        # within the engine's short RenderTimeout (100ms).
+        import base64
         uuid = path if path else DEVICE_UUID
         png_name = f"{uuid}.png"
         fpath = os.path.join(_SERVE_DIR, png_name)
         if not os.path.exists(fpath):
-            # Fallback: try first PNG in serve dir
             pngs = [f for f in os.listdir(_SERVE_DIR) if f.endswith(".png")]
             if pngs:
-                png_name = pngs[0]
+                fpath = os.path.join(_SERVE_DIR, pngs[0])
             else:
                 self.send_error(404, "No image available yet")
                 return
-        # Use file mtime as cache-buster so WebKit fetches the fresh PNG
-        mtime = int(os.path.getmtime(os.path.join(_SERVE_DIR, png_name)))
+        with open(fpath, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
         html = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=1600,height=1200,initial-scale=1">'
                 f'<style>*{{margin:0;padding:0}}body{{overflow:hidden;background:#fff}}'
                 f'img{{display:block;width:1600px;height:1200px}}</style></head>'
-                f'<body><img src="/{png_name}?v={mtime}"></body></html>')
+                f'<body><img src="data:image/png;base64,{b64}"></body></html>')
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-cache, no-store")
