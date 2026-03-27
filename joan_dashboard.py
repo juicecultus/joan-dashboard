@@ -673,7 +673,7 @@ class _ImageHandler(BaseHTTPRequestHandler):
         html = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
                 f'<style>*{{margin:0;padding:0}}body{{overflow:hidden}}'
                 f'img{{width:100vw;height:100vh;object-fit:contain}}</style></head>'
-                f'<body><img src="/{png_name}?t={int(time.time())}"></body></html>')
+                f'<body><img src="/{png_name}"></body></html>')
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-cache, no-store")
@@ -702,7 +702,7 @@ def _configure_vss_session(device_uuid: str):
             "Uuid": device_uuid,
             "Backend": {
                 "Name": "HTML",
-                "Fields": {"url": serve_url, "ReloadTimeout": "30"}
+                "Fields": {"url": serve_url, "ReloadTimeout": "180"}
             },
             "Options": {
                 "Beautify": "pretty,gamma=1.1",
