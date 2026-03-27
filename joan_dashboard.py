@@ -17,7 +17,9 @@ import json
 import math
 import os
 import sys
+import threading
 import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Prevent double-import: when run as __main__, register this module under its
 # real name so that 'from joan_dashboard import ...' in joan_screens.py reuses
@@ -47,6 +49,13 @@ _DEVICE_UUIDS_RAW = os.environ.get("DEVICE_UUIDS", os.environ.get("DEVICE_UUID",
 DEVICE_UUID = _DEVICE_UUIDS_RAW.split(",")[0].strip() if _DEVICE_UUIDS_RAW else ""
 VSS_USER = os.environ.get("VSS_USER", "admin")
 VSS_PASS = os.environ.get("VSS_PASS", "visionect1")
+
+# Port for the local HTTP server that serves rendered images to the VSS engine.
+# The VSS engine's WebKit fetches from this server instead of using the broken
+# /backend/ push endpoint (port 11116 never binds on Pi 5).
+IMAGE_SERVE_PORT = int(os.environ.get("IMAGE_SERVE_PORT", "8888"))
+# Host IP reachable from inside the VSS Docker container (docker0 bridge)
+IMAGE_SERVE_HOST = os.environ.get("IMAGE_SERVE_HOST", "172.17.0.1")
 
 WIDTH = 1600
 HEIGHT = 1200
@@ -621,6 +630,98 @@ def render_dashboard() -> Image.Image:
     return img
 
 
+# --- Image-serving HTTP server ---
+# Instead of pushing images via the broken VSS /backend/ endpoint (port 11116
+# never binds on Pi 5 due to WebKit/Xorg incompatibility), we save rendered
+# images to disk and serve them via a local HTTP server.  The VSS engine's
+# WebKit fetches our page and pushes the result to the Joan device.
+
+_SERVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serve")
+os.makedirs(_SERVE_DIR, exist_ok=True)
+
+
+class _ImageHandler(BaseHTTPRequestHandler):
+    """Serve the latest rendered image as a full-screen HTML page."""
+
+    def do_GET(self):
+        path = self.path.strip("/")
+        # Serve PNG file directly
+        if path.endswith(".png"):
+            fpath = os.path.join(_SERVE_DIR, path)
+            if os.path.exists(fpath):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Cache-Control", "no-cache, no-store")
+                self.end_headers()
+                with open(fpath, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_error(404)
+            return
+        # Serve HTML page that displays the image full-screen
+        uuid = path if path else DEVICE_UUID
+        png_name = f"{uuid}.png"
+        fpath = os.path.join(_SERVE_DIR, png_name)
+        if not os.path.exists(fpath):
+            # Fallback: try first PNG in serve dir
+            pngs = [f for f in os.listdir(_SERVE_DIR) if f.endswith(".png")]
+            if pngs:
+                png_name = pngs[0]
+            else:
+                self.send_error(404, "No image available yet")
+                return
+        html = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
+                f'<style>*{{margin:0;padding:0}}body{{overflow:hidden}}'
+                f'img{{width:100vw;height:100vh;object-fit:contain}}</style></head>'
+                f'<body><img src="/{png_name}?t={int(time.time())}"></body></html>')
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+    def log_message(self, format, *args):
+        pass  # silence request logs
+
+
+def _start_image_server():
+    """Start the image-serving HTTP server in a daemon thread."""
+    server = HTTPServer(("0.0.0.0", IMAGE_SERVE_PORT), _ImageHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"[http] Image server started on port {IMAGE_SERVE_PORT}")
+
+
+def _configure_vss_session(device_uuid: str):
+    """Point the VSS device session URL to our local image server."""
+    base_url = f"http://{VSS_HOST}:{VSS_PORT}"
+    try:
+        s = get_session(base_url)
+        serve_url = f"http://{IMAGE_SERVE_HOST}:{IMAGE_SERVE_PORT}/{device_uuid}"
+        session_data = {
+            "Uuid": device_uuid,
+            "Backend": {
+                "Name": "HTML",
+                "Fields": {"url": serve_url, "ReloadTimeout": "30"}
+            },
+            "Options": {
+                "Beautify": "pretty,gamma=1.1",
+                "ChangesAutodetect": "true,threshold=0",
+                "DefaultDithering": "none",
+                "DefaultEncoding": "4"
+            },
+            "Storage": None
+        }
+        r = s.put(f"{base_url}/api/session/{device_uuid}",
+                  json=session_data, timeout=5)
+        if r.status_code in (200, 204):
+            print(f"[vss] Session configured: {device_uuid[:12]}... -> {serve_url}")
+        else:
+            print(f"[vss] Session config failed: {r.status_code} {r.text}")
+    except Exception as e:
+        print(f"[vss] Session config error: {e}")
+
+
 # --- VSS communication ---
 _active_device_uuid = None  # set per-device before rendering for correct footer
 
@@ -761,7 +862,11 @@ def _get_devices() -> list:
 
 
 def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = None):
-    """Push a PIL Image to a Joan device via VSS HTTP backend.
+    """Push a PIL Image to a Joan device.
+
+    Saves the rendered image to the local serve directory so the VSS engine's
+    WebKit can fetch it via our HTTP server.  Also attempts the legacy
+    /backend/ API push as a fallback (works when VSS port 11116 is available).
 
     If target_size differs from the image dimensions, the image is
     LANCZOS-resized to the device's native resolution before pushing.
@@ -776,23 +881,31 @@ def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = N
     if target_size and (img.width, img.height) != target_size:
         out = img.resize(target_size, Image.LANCZOS)
 
-    base_url = f"http://{VSS_HOST}:{VSS_PORT}"
-    session = get_session(base_url)
-
-    # Convert to RGB PNG (VSS requires no alpha)
+    # Convert to RGB PNG
     rgb = out.convert("RGB")
-    buf = io.BytesIO()
-    rgb.save(buf, format="PNG")
-    buf.seek(0)
 
-    r = session.put(
-        f"{base_url}/backend/{uuid}",
-        files=[("image", ("dashboard.png", buf, "image/png"))],
-    )
-    if r.status_code == 200:
-        print(f"[push] -> {uuid[:12]}... {out.width}x{out.height} ({buf.tell()} bytes)")
-    else:
-        print(f"[push] x {uuid[:12]}...: {r.status_code} {r.text}")
+    # Save to serve directory for the HTTP image server
+    serve_path = os.path.join(_SERVE_DIR, f"{uuid}.png")
+    rgb.save(serve_path, format="PNG")
+    fsize = os.path.getsize(serve_path)
+    print(f"[push] -> {uuid[:12]}... {out.width}x{out.height} ({fsize} bytes)")
+
+    # Also attempt legacy /backend/ push (works if VSS engine port 11116 is up)
+    try:
+        base_url = f"http://{VSS_HOST}:{VSS_PORT}"
+        session = get_session(base_url)
+        buf = io.BytesIO()
+        rgb.save(buf, format="PNG")
+        buf.seek(0)
+        r = session.put(
+            f"{base_url}/backend/{uuid}",
+            files=[("image", ("dashboard.png", buf, "image/png"))],
+            timeout=5,
+        )
+        if r.status_code == 200:
+            print(f"[push] (backend ok)")
+    except Exception:
+        pass  # silently fall back to HTTP serve method
 
 
 def push_to_all(img: Image.Image):
@@ -860,6 +973,15 @@ def main():
         else:
             render_and_push_all(ALL_SCREENS[args.screen])
         return
+
+    # Start image-serving HTTP server and configure VSS sessions
+    if not args.preview:
+        _start_image_server()
+        devices = _get_devices()
+        for dev in devices:
+            _configure_vss_session(dev["uuid"])
+        if not devices and DEVICE_UUID:
+            _configure_vss_session(DEVICE_UUID)
 
     # Playlist mode
     if args.playlist:

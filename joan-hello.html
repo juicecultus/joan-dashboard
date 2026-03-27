@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px;
+    height: 1200px;
+    background: white;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  h1 {
+    font-size: 96px;
+    font-weight: 300;
+    color: #000;
+    margin-bottom: 40px;
+  }
+  p {
+    font-size: 36px;
+    color: #555;
+    margin-bottom: 20px;
+  }
+  .time {
+    font-size: 120px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 30px;
+  }
+  .date {
+    font-size: 42px;
+    color: #333;
+  }
+  .footer {
+    position: absolute;
+    bottom: 60px;
+    font-size: 24px;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+  <div class="time" id="time"></div>
+  <h1>Hello, Joan!</h1>
+  <p class="date" id="date"></p>
+  <p>Visionect Software Suite is working</p>
+  <div class="footer">Place &amp; Play 13" &bull; 1600&times;1200 &bull; Connected to Pi5</div>
+  <script>
+    function update() {
+      var now = new Date();
+      var h = now.getHours().toString().padStart(2,"0");
+      var m = now.getMinutes().toString().padStart(2,"0");
+      document.getElementById("time").textContent = h + ":" + m;
+      var opts = { weekday:"long", year:"numeric", month:"long", day:"numeric" };
+      document.getElementById("date").textContent = now.toLocaleDateString("en-US", opts);
+    }
+    update();
+  </script>
+</body>
+</html>
