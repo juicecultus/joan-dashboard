@@ -67,8 +67,12 @@ Joan devices are thin clients. They don't run apps — instead, they periodicall
 1. Fetches weather, calendar events, and tasks from APIs
 2. Renders a 1600×1200 grayscale PNG using Python Pillow (reference canvas)
 3. Auto-discovers all configured devices and their native resolutions from VSS
-4. LANCZOS-resizes and pushes to each device via the VSS HTTP API
-5. Each Joan device picks up its correctly-sized image on the next poll cycle
+4. Saves the rendered image to a local `serve/` directory
+5. A built-in HTTP server (port 8888) serves the image as a base64-embedded HTML page
+6. The VSS engine's WebKit fetches the page and pushes the rendered content to each device
+7. Each Joan device picks up its correctly-sized image on the next poll cycle
+
+> **Architecture note:** The dashboard uses an HTTP image server instead of the VSS `/backend/` push API. On Raspberry Pi 5, the VSS engine's internal WebKit port (11116) never binds due to armhf/Xorg incompatibility with the Pi 5's kernel. The HTTP server workaround lets the engine's WebKit fetch pre-rendered images from the dashboard and push them to devices normally.
 
 ## Prerequisites
 
@@ -137,6 +141,42 @@ docker compose up -d
 ```
 
 Verify VSS is running by opening `http://<pi-ip>:8081` in a browser. You should see the VSS management UI. Default login is `admin` / `visionect1`.
+
+#### Raspberry Pi 5 extra steps
+
+The VSS armhf container uses 32-bit binaries that require 4KB memory pages. The Pi 5's default kernel uses 16KB pages, which causes `ELF load command alignment not page-aligned` errors. Two fixes are required:
+
+**1. Switch to the 4KB page kernel:**
+
+```bash
+# Add to /boot/firmware/config.txt:
+echo "kernel=kernel8.img" | sudo tee -a /boot/firmware/config.txt
+sudo reboot
+# Verify after reboot:
+getconf PAGE_SIZE   # should print 4096
+```
+
+**2. Allow Docker→host traffic for the image server:**
+
+The dashboard runs an HTTP image server on port 8888 that the VSS engine fetches from. Docker's bridge network needs an iptables rule to reach the host:
+
+```bash
+# Find your Docker bridge gateway:
+docker network inspect $(docker network ls -q -f name=visionect) -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+
+# Add iptables rule (replace br-+ with your bridge interface if needed):
+sudo iptables -I INPUT 1 -i br-+ -p tcp --dport 8888 -j ACCEPT
+
+# Make it persistent across reboots:
+sudo tee /etc/rc.local > /dev/null << 'EOF'
+#!/bin/bash
+iptables -I INPUT 1 -i br-+ -p tcp --dport 8888 -j ACCEPT
+exit 0
+EOF
+sudo chmod +x /etc/rc.local
+```
+
+Set `IMAGE_SERVE_HOST` in your `.env` to the Docker bridge gateway IP (e.g. `172.19.0.1`). The dashboard will configure the VSS session to fetch from this address automatically.
 
 ### 3. Redirect the Joan device to your local VSS
 
@@ -233,6 +273,8 @@ DEVICE_UUIDS=uuid1,uuid2     # Comma-separated UUIDs (find in VSS web UI → Dev
 WEATHER_LAT=51.509            # Your latitude
 WEATHER_LON=-0.118            # Your longitude
 WEATHER_LOCATION=London       # Display name
+IMAGE_SERVE_HOST=172.19.0.1   # Docker bridge gateway IP (see Pi 5 setup above)
+IMAGE_SERVE_PORT=8888         # Port for the built-in image server (default: 8888)
 ```
 
 **Finding your Device UUIDs:** Open the VSS web UI at `http://<VSS_HOST>:8081`, go to Devices, and copy the UUID of each Joan device. Separate multiple UUIDs with commas. If you have only one device, `DEVICE_UUID=...` (singular) also works.
@@ -564,6 +606,10 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 | "Weather unavailable" | Check your internet connection. Open-Meteo is free and has no API key, so it should just work. |
 | No calendar events | Run `python joan_google_auth.py` to re-authenticate. Check that Calendar API is enabled in Google Cloud Console. |
 | Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUIDS` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. Ensure the device is "Allowed" in VSS. |
+| Joan shows "could not connect" | The VSS engine can't reach the image server. Check `IMAGE_SERVE_HOST` matches your Docker bridge gateway. Verify the iptables rule is in place: `sudo iptables -L INPUT -n \| grep 8888`. |
+| `ELF load command alignment not page-aligned` in VSS logs | You're on a Pi 5 with a 16KB page kernel. Add `kernel=kernel8.img` to `/boot/firmware/config.txt` and reboot. See [Pi 5 setup](#raspberry-pi-5-extra-steps). |
+| VSS `/backend/` push returns 400 / connection refused on port 11116 | This is expected on Pi 5 — the VSS engine's internal WebKit port doesn't bind. The dashboard uses its HTTP image server (port 8888) to bypass this. Ensure the dashboard service is running. |
+| Engine crash-loops after restart | Port conflicts from stale processes. Do a full `docker compose down && docker compose up -d` instead of `docker compose restart`. |
 | Fonts look wrong | Install `fonts-dejavu` on Linux (`sudo apt install fonts-dejavu`). On macOS, Helvetica is used by default. |
 | Token expired | Delete `token.json` and re-run `python joan_google_auth.py`. |
 | Service won't start on Pi | Check logs with `journalctl -u joan-dashboard -e`. Ensure `.venv` exists and deps are installed. |
