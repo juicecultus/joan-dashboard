@@ -47,8 +47,21 @@ def _fetch_torah_verse():
 
     # Pick a verse based on day
     vidx = day % len(texts)
-    en_text = re.sub(r"<[^>]+>", "", str(texts[vidx]))
-    he_text = re.sub(r"<[^>]+>", "", str(he_texts[vidx])) if vidx < len(he_texts) else ""
+
+    def _clean_sefaria_text(raw_text: str) -> str:
+        text = str(raw_text or "")
+        text = re.sub(r"<sup class=\"footnote-marker\">.*?</sup><i class=\"footnote\">.*?</i>", "", text, flags=re.S)
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+        text = re.sub(r"</span>\s*<span[^>]*>", " ", text, flags=re.I)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = html.unescape(text)
+        text = re.sub(r"[ \t\xa0]+", " ", text)
+        text = re.sub(r"\s*\n\s*", "\n", text)
+        text = re.sub(r"\n{2,}", "\n", text)
+        return text.strip()
+
+    en_text = _clean_sefaria_text(texts[vidx])
+    he_text = _clean_sefaria_text(he_texts[vidx]) if vidx < len(he_texts) else ""
     verse_ref = f"{ref_base.rsplit('.', 1)[0] if '.' in ref_base else ref_base}:{vidx + 1}"
 
     return {"en": en_text, "he": he_text, "ref": verse_ref}
@@ -76,7 +89,7 @@ def render_torah_wisdom() -> Image.Image:
     he_text = verse.get("he", "")
     ref_str = verse.get("ref", "")
 
-    content_top = 24
+    content_top = 28
     content_bottom = footer_y - 18
     content_height = content_bottom - content_top
     split_y = content_top + content_height // 2
@@ -84,11 +97,11 @@ def render_torah_wisdom() -> Image.Image:
     # Divider and language labels
     draw.line([(PAD, split_y), (WIDTH - PAD, split_y)], fill=150, width=2)
     draw.text((WIDTH // 2, content_top), "English", fill=80, font=get_font(24, bold=True), anchor="mt")
-    draw.text((WIDTH // 2, split_y + 10), "Hebrew", fill=80, font=get_font(24, bold=True), anchor="mt")
+    draw.text((WIDTH // 2, split_y + 12), "Hebrew", fill=80, font=get_font(24, bold=True), anchor="mt")
 
     # English text in the top half
-    en_block_top = content_top + 34
-    en_block_height = max(20, split_y - en_block_top - 24)
+    en_block_top = content_top + 44
+    en_block_height = max(20, split_y - en_block_top - 32)
     en_text = re.sub(r"\s+", " ", en_text).strip()
     if len(en_text) > 320:
         en_text = en_text[:317].rstrip() + "..."
@@ -106,12 +119,12 @@ def render_torah_wisdom() -> Image.Image:
         max_lines=6,
     )
     if ref_str:
-        draw.text((WIDTH // 2, split_y - 12), f"— {ref_str}", fill=85, font=get_font(24), anchor="mt")
+        draw.text((WIDTH // 2, split_y - 18), f"— {ref_str}", fill=85, font=get_font(22), anchor="mt")
 
     # Hebrew text in the bottom half
     if he_text:
-        he_block_top = split_y + 34
-        he_block_height = max(20, content_bottom - he_block_top - 8)
+        he_block_top = split_y + 42
+        he_block_height = max(20, content_bottom - he_block_top - 12)
         if len(he_text) > 260:
             he_text = he_text[:257].rstrip() + "..."
         _draw_wrapped_block(
