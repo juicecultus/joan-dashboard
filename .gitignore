@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 env/
+.windsurf/
 
 # Secrets — NEVER commit these
 credentials.json
