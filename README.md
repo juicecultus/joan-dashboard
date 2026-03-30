@@ -591,6 +591,10 @@ COL_DIV = 800     # column divider x position
 LINE_H = 38       # standard line height
 ```
 
+The rotating playlist screens now live under `screens/` as small, focused modules.
+`joan_screens.py` remains as a compatibility wrapper, so new screen work should go into
+the matching file in `screens/` rather than the wrapper.
+
 ### Change fonts
 
 The `get_font()` function searches for system fonts. It tries Helvetica (macOS), then DejaVu Sans and Liberation Sans (Linux). Add your preferred font paths to the `candidates` lists.
