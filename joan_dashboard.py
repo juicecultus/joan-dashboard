@@ -4,7 +4,7 @@
 Usage:
     python joan_dashboard.py              # render once and push
     python joan_dashboard.py --loop 300   # re-render and push every 300 seconds
-    python joan_dashboard.py --preview    # save to joan_preview.png without pushing
+    python joan_dashboard.py --preview    # save PNG previews under /previews without pushing
 
 First-time setup:
     python joan_google_auth.py            # authenticate with Google (hello@allmumstalk.com)
@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import time
+from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Prevent double-import: when run as __main__, register this module under its
@@ -59,6 +60,8 @@ IMAGE_SERVE_HOST = os.environ.get("IMAGE_SERVE_HOST", "172.17.0.1")
 
 WIDTH = 1600
 HEIGHT = 1200
+PREVIEW_DIR = Path("/previews")
+FALLBACK_PREVIEW_DIR = Path(__file__).resolve().parent / "previews"
 
 # Weather: lat/lon for Open-Meteo (default: Waddesdon, Buckinghamshire)
 WEATHER_LAT = float(os.environ.get("WEATHER_LAT", "51.845"))
@@ -122,6 +125,20 @@ def _truncate_text(font, text: str, max_width: int) -> str:
     while trimmed and font.getlength(trimmed + "…") > max_width:
         trimmed = trimmed[:-1]
     return trimmed.rstrip() + "…"
+
+
+def _save_preview_image(img: Image.Image, filename: str) -> Path:
+    """Save a preview PNG under /previews and return the path."""
+    for directory in (PREVIEW_DIR, FALLBACK_PREVIEW_DIR):
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            path = directory / filename
+            img.save(path)
+            return path
+        except OSError as exc:
+            print(f"[preview] Cannot write to {directory}: {exc}")
+            continue
+    raise OSError("Unable to save preview image to /previews or local previews/")
 
 
 # --- Weather via Open-Meteo (free, no API key) ---
@@ -989,8 +1006,7 @@ def main():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering screen: {args.screen}")
         if args.preview:
             img = ALL_SCREENS[args.screen]()
-            path = f"joan_preview_{args.screen}.png"
-            img.save(path)
+            path = _save_preview_image(img, f"{args.screen}.png")
             print(f"[preview] Saved to {path}")
         else:
             render_and_push_all(ALL_SCREENS[args.screen])
@@ -1137,8 +1153,7 @@ def main():
 
         if args.preview:
             img = render_dashboard()
-            path = "joan_preview.png"
-            img.save(path)
+            path = _save_preview_image(img, "dashboard.png")
             print(f"[preview] Saved to {path}")
             return
 

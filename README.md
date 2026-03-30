@@ -303,12 +303,12 @@ This opens a browser window. Log in with the Google account whose calendar and t
 ### 4. Preview
 
 ```bash
-python joan_dashboard.py --preview                  # preview main dashboard
-python joan_dashboard.py --screen art --preview      # preview a specific screen
-python joan_dashboard.py --screen radar --preview    # preview weather radar
+python joan_dashboard.py --preview                  # preview main dashboard (saved to /previews/dashboard.png)
+python joan_dashboard.py --screen art --preview      # preview a specific screen (saved to /previews/art.png)
+python joan_dashboard.py --screen radar --preview    # preview weather radar (saved to /previews/radar.png)
 ```
 
-Saves a PNG locally without pushing to the device. Great for testing.
+Saves PNG previews under `/previews` without pushing to the device. Great for testing.
 
 ### 5. Push to Joan (single)
 

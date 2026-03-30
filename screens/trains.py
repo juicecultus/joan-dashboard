@@ -1,4 +1,5 @@
 from .shared import *
+import xml.etree.ElementTree as ET
 
 # ── UK Train Departures ──────────────────────────────────────────────
 
@@ -20,23 +21,86 @@ _CRS_NAMES = {
 }
 
 
+def _xml_to_dict(node):
+    """Convert a minimal XML tree into nested dict/list structures."""
+    children = list(node)
+    if not children:
+        return (node.text or "").strip()
+
+    result = {}
+    for child in children:
+        key = child.tag.split("}")[-1]
+        value = _xml_to_dict(child)
+        if key in result:
+            if not isinstance(result[key], list):
+                result[key] = [result[key]]
+            result[key].append(value)
+        else:
+            result[key] = value
+    return result
+
+
+def _board_payload(data):
+    """Return the board payload regardless of JSON proxy or SOAP-style nesting."""
+    if not isinstance(data, dict):
+        return {}
+    for key in ("GetStationBoardResult", "GetDepBoardWithDetailsResult", "GetArrivalBoardResult"):
+        nested = data.get(key)
+        if isinstance(nested, dict):
+            return nested
+    return data
+
+
+def _service_list(board):
+    """Normalize service containers into a flat list of service dicts."""
+    services = board.get("trainServices") or board.get("services") or []
+    if isinstance(services, dict):
+        services = services.get("service") or services.get("Service") or []
+    if isinstance(services, dict):
+        services = [services]
+    return services or []
+
+
+def _message_list(board):
+    """Normalize disruption messages into a flat list."""
+    messages = board.get("nrccMessages") or board.get("messages") or []
+    if isinstance(messages, dict):
+        messages = messages.get("msg") or messages.get("message") or messages.get("value") or []
+    if isinstance(messages, dict):
+        messages = [messages]
+    return messages or []
+
+
 def _fetch_trains():
     """Fetch live departures from the configured station via LDBWS API."""
     if not TRAINS_API_KEY:
         return None
-    url = (
-        f"https://api1.raildata.org.uk/1010-live-departure-board-dep1_2"
-        f"/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}"
-    )
-    params = {"numRows": 10}
     headers = {
         "x-apikey": TRAINS_API_KEY,
         "User-Agent": "JoanDashboard/1.0",
-        "Accept": "application/json",
+        "Accept": "application/json, text/xml;q=0.9, application/xml;q=0.8, */*;q=0.1",
     }
-    r = requests.get(url, params=params, headers=headers, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    params = {"numRows": 10}
+    urls = [
+        f"https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}",
+        f"https://api1.raildata.org.uk/1010-live-departure-board-dep/LDBWS/api/20220120/GetDepBoardWithDetails/{TRAINS_STATION}",
+    ]
+    last_error = None
+    for url in urls:
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=10)
+            r.raise_for_status()
+            try:
+                return r.json()
+            except ValueError:
+                root = ET.fromstring(r.text)
+                return _xml_to_dict(root)
+        except Exception as exc:
+            last_error = exc
+            print(f"[trains] fetch failed from {url}: {exc}")
+    if last_error:
+        raise last_error
+    return None
 
 
 def _minutes_until(time_str):
@@ -59,14 +123,16 @@ def render_trains() -> Image.Image:
     draw = ImageDraw.Draw(img)
 
     station_name = _CRS_NAMES.get(TRAINS_STATION, TRAINS_STATION)
+    destination_name = _CRS_NAMES.get(TRAINS_DESTINATION, TRAINS_DESTINATION)
 
     # Fetch departures (cached 2min, stale up to 30min)
     data = _cache_fetch("trains", 120, 1800, _fetch_trains)
+    board = _board_payload(data) if isinstance(data, dict) else {}
 
     # --- Header bar ---
     header_h = 90
     draw.rectangle([0, 0, WIDTH, header_h], fill=30)
-    draw.text((PAD, header_h // 2), f"Live Departures — {station_name}",
+    draw.text((PAD, header_h // 2), f"Live Departures — {station_name} > {destination_name}",
               fill=240, font=get_font(42, bold=True), anchor="lm")
     now_str = datetime.now().strftime("%H:%M")
     draw.text((WIDTH - PAD, header_h // 2), now_str,
@@ -84,7 +150,7 @@ def render_trains() -> Image.Image:
         return img
 
     # --- NRCC disruption messages ---
-    nrcc = data.get("nrccMessages") or []
+    nrcc = _message_list(board)
     for msg_obj in nrcc[:2]:
         msg_val = msg_obj.get("value", "") if isinstance(msg_obj, dict) else str(msg_obj)
         # Strip HTML tags
@@ -98,8 +164,10 @@ def render_trains() -> Image.Image:
 
     # Parse services
     services = []
-    train_services = data.get("trainServices") or []
+    train_services = _service_list(board)
     for svc in train_services[:10]:
+        if not isinstance(svc, dict):
+            continue
         std = svc.get("std", "")
         etd = svc.get("etd", "")
         platform = svc.get("platform", "-")
