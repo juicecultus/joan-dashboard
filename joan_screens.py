@@ -19,6 +19,11 @@ from io import BytesIO
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+try:
+    from bidi.algorithm import get_display as _bidi_get_display
+except Exception:
+    _bidi_get_display = None
+
 # Reuse from main dashboard
 from joan_dashboard import (
     WIDTH, HEIGHT, get_font, fetch_weather, fetch_week_events,
@@ -59,7 +64,10 @@ def _get_hebrew_font(size: int) -> ImageFont.FreeTypeFont:
     if key not in _INTL_FONT_CACHE:
         candidates = [
             "/Library/Fonts/Arial Unicode.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Hebrew.ttf",
             "/System/Library/Fonts/Supplemental/Raanana.ttc",
+            "/System/Library/Fonts/Supplemental/Geeza Pro.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -102,42 +110,71 @@ def _cache_fetch(key, ttl, max_stale, fetch_fn):
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _wrap_text(font, text, max_width):
+def _text_width(font, text: str) -> int:
+    """Measure text width using the font's bounding box for stable layout."""
+    bbox = font.getbbox(text or " ")
+    return bbox[2] - bbox[0]
+
+
+def _text_height(font, text: str) -> int:
+    """Measure text height using the font's bounding box for stable layout."""
+    bbox = font.getbbox(text or " ")
+    return bbox[3] - bbox[1]
+
+
+def _shape_rtl_text(text: str) -> str:
+    """Best-effort RTL shaping for Hebrew text."""
+    if not text:
+        return text
+    if _bidi_get_display is not None:
+        try:
+            return "\n".join(_bidi_get_display(line) for line in text.splitlines())
+        except Exception:
+            pass
+
+    shaped_lines = []
+    for line in text.splitlines():
+        words = line.split()
+        if not words:
+            shaped_lines.append(line)
+            continue
+        shaped_words = [word[::-1] for word in reversed(words)]
+        shaped_lines.append(" ".join(shaped_words))
+    return "\n".join(shaped_lines)
+
+
+def _is_rtl_text(text: str) -> bool:
+    """Return True when a string contains Hebrew/RTL characters."""
+    return any("\u0590" <= ch <= "\u08FF" for ch in text)
+
+
+def _wrap_text(font, text, max_width, rtl=False):
     """Wrap text to fit within max_width using the given font."""
     words = text.split()
     lines = []
     line = ""
     for word in words:
         test = f"{line} {word}".strip()
-        if font.getlength(test) > max_width:
+        measured = _shape_rtl_text(test) if rtl else test
+        if _text_width(font, measured) > max_width:
             if line:
-                lines.append(line)
+                lines.append(_shape_rtl_text(line) if rtl else line)
             line = word
         else:
             line = test
     if line:
-        lines.append(line)
+        lines.append(_shape_rtl_text(line) if rtl else line)
     return lines
 
 
-def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 120):
+def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 120, rtl=False):
     """Draw text centered at y, wrapping if needed. Returns new y."""
-    font = get_font(size, bold=bold)
+    rtl = rtl or _is_rtl_text(text)
+    font = _get_hebrew_font(size) if rtl else get_font(size, bold=bold)
     lines = []
     for paragraph in text.split("\n"):
-        words = paragraph.split()
-        line = ""
-        for word in words:
-            test = f"{line} {word}".strip()
-            if font.getlength(test) > max_width:
-                if line:
-                    lines.append(line)
-                line = word
-            else:
-                line = test
-        if line:
-            lines.append(line)
-    line_h = int(size * 1.4)
+        lines.extend(_wrap_text(font, paragraph, max_width, rtl=rtl) or [""])
+    line_h = max(int(_text_height(font, "Ag") * 1.25), size + 6)
     for line in lines:
         draw.text((WIDTH // 2, y), line, fill=fill, font=font, anchor="mt")
         y += line_h
@@ -2756,25 +2793,15 @@ def render_torah_wisdom() -> Image.Image:
     en_font = get_font(36)
     en_lines = []
     for paragraph in en_text.split("\n"):
-        words = paragraph.split()
-        line = ""
-        for w in words:
-            test = f"{line} {w}".strip()
-            if en_font.getlength(test) > en_area_w:
-                if line:
-                    en_lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            en_lines.append(line)
+        en_lines.extend(_wrap_text(en_font, paragraph, en_area_w) or [""])
     en_lines = en_lines[:8]
-    total_en_h = len(en_lines) * 46
+    en_line_h = max(int(_text_height(en_font, "Ag") * 1.25), 46)
+    total_en_h = len(en_lines) * en_line_h
     en_y = (footer_y - total_en_h) // 2
     for ln in en_lines:
         draw.text((PAD + en_area_w // 2, en_y), ln, fill=30,
                   font=en_font, anchor="mt")
-        en_y += 46
+        en_y += en_line_h
 
     # Reference below English block
     if ref_str:
@@ -2787,25 +2814,16 @@ def render_torah_wisdom() -> Image.Image:
             he_text = he_text[:197].rstrip() + "..."
         he_font = _get_hebrew_font(34)
         he_area_w = WIDTH // 2 - 100
-        words = he_text.split()
         he_lines = []
-        line = ""
-        for w in words:
-            test = f"{line} {w}".strip()
-            if he_font.getlength(test) > he_area_w:
-                if line:
-                    he_lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            he_lines.append(line)
+        for paragraph in he_text.split("\n"):
+            he_lines.extend(_wrap_text(he_font, paragraph, he_area_w, rtl=True) or [""])
         he_lines = he_lines[:8]
-        total_he_h = len(he_lines) * 48
+        he_line_h = max(int(_text_height(he_font, "אבג") * 1.25), 48)
+        total_he_h = len(he_lines) * he_line_h
         he_y = (footer_y - total_he_h) // 2
         for ln in he_lines:
             draw.text((WIDTH - PAD, he_y), ln, fill=60, font=he_font, anchor="rt")
-            he_y += 48
+            he_y += he_line_h
 
     return img
 

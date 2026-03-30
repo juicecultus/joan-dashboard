@@ -595,6 +595,8 @@ LINE_H = 38       # standard line height
 
 The `get_font()` function searches for system fonts. It tries Helvetica (macOS), then DejaVu Sans and Liberation Sans (Linux). Add your preferred font paths to the `candidates` lists.
 
+Hebrew / RTL text also uses a bidi-aware shaping path plus a Hebrew-capable font fallback (`Noto Sans Hebrew`, `Arial Hebrew`, `DejaVu Sans`, etc.). If you add a new Linux image, make sure a Hebrew font package is installed so the Torah screen renders correctly.
+
 ### Change weather location
 
 Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Coordinates can be found at [latlong.net](https://www.latlong.net/).
@@ -607,6 +609,7 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 | No calendar events | Run `python joan_google_auth.py` to re-authenticate. Check that Calendar API is enabled in Google Cloud Console. |
 | Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUIDS` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. Ensure the device is "Allowed" in VSS. |
 | Google Doodle shows the same image every day | The screen now refreshes once per day. If you still see a stale doodle, restart the dashboard to clear the in-memory cache and confirm outbound access to `https://doodles.google/`. |
+| Hebrew text looks reversed or glyphs are missing | Install `python-bidi` from `requirements.txt` and a Hebrew-capable font package (for example `fonts-noto-core` or the platform's Hebrew fonts). Then restart the dashboard service. |
 | Joan shows "could not connect" | The VSS engine can't reach the image server. Check `IMAGE_SERVE_HOST` matches your Docker bridge gateway. Verify the iptables rule is in place: `sudo iptables -L INPUT -n \| grep 8888`. |
 | `ELF load command alignment not page-aligned` in VSS logs | You're on a Pi 5 with a 16KB page kernel. Add `kernel=kernel8.img` to `/boot/firmware/config.txt` and reboot. See [Pi 5 setup](#raspberry-pi-5-extra-steps). |
 | VSS `/backend/` push returns 400 / connection refused on port 11116 | This is expected on Pi 5 — the VSS engine's internal WebKit port doesn't bind. The dashboard uses its HTTP image server (port 8888) to bypass this. Ensure the dashboard service is running. |
@@ -619,6 +622,7 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 ## Tech Stack
 
 - **Python 3** + **Pillow** for image rendering
+- **python-bidi** for RTL shaping of Hebrew text
 - **Open-Meteo API** for weather (free, no key required)
 - **Google Calendar API v3** + **Google Tasks API v1** via OAuth2
 - **Visionect Software Suite** HTTP API for device communication and sensor data
