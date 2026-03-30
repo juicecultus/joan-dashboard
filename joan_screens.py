@@ -3195,6 +3195,8 @@ def _fetch_google_doodle():
     """Fetch the latest Google Doodle by scraping doodles.google."""
     r = requests.get("https://doodles.google/", timeout=15, headers={
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
     })
     r.raise_for_status()
     # Parse img tags with class hero-tag-carousel__collage-card-img
@@ -3213,7 +3215,10 @@ def render_google_doodle() -> Image.Image:
     img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
-    doodle = _cache_fetch("google_doodle", 7200, 86400, _fetch_google_doodle)
+    # Key the cache by local day so the doodle is refreshed once per day.
+    # This avoids reusing yesterday's doodle when the screen rotates daily.
+    cache_key = f"google_doodle:{datetime.now().strftime('%Y-%m-%d')}"
+    doodle = _cache_fetch(cache_key, 86400, 0, _fetch_google_doodle)
 
     # --- Header ---
     header_h = 90
@@ -3236,7 +3241,11 @@ def render_google_doodle() -> Image.Image:
     doodle_img = None
     if image_url:
         try:
-            r = requests.get(image_url, timeout=15)
+            r = requests.get(image_url, timeout=15, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+            })
             r.raise_for_status()
             doodle_img = Image.open(BytesIO(r.content))
         except Exception as e:

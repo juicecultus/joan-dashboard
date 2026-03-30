@@ -39,7 +39,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Bin Collection Day** — next bin collection date with bin type icons, urgency banner (TODAY/TOMORROW), and upcoming schedule; powered by Buckinghamshire Council’s iTouchVision API (uses [UKBinCollectionData](https://github.com/robbrad/UKBinCollectionData) encryption approach); configurable via `BIN_UPRN`
 - **Flip Date** — retro flip-calendar display showing day name, day number, and month in large black panels with flip-hinge lines (inspired by [trmnl-flip-date](https://github.com/alisterscott/trmnl-flip-date)); pure calculation, no API
 - **GitHub Trending** — top 10 daily trending repositories in a two-column layout with repo name, description, language, stars, forks, and daily star gain; powered by [doforce/github-trending](https://github.com/doforce/github-trending) API (free, no key)
-- **Google Doodle** — latest Google Doodle artwork displayed full-screen with title; scraped from [doodles.google](https://doodles.google/) (free, no key)
+- **Google Doodle** — latest Google Doodle artwork displayed full-screen with title; refreshed daily from [doodles.google](https://doodles.google/) (free, no key)
 - **Chinese Proverb** — daily translated Chinese proverb with original characters; rotates through 127 proverbs from [SteveBloX/trmnl-recipes](https://github.com/SteveBloX/trmnl-recipes) (static JSON, no API key)
 - **Bank Holidays** — upcoming England & Wales bank holidays with countdown badges; data from [gov.uk](https://www.gov.uk/bank-holidays.json) (free, no key)
 - **Flip Clock** — retro flip clock with 4 digit panels showing HH:MM in 12-hour format with AM/PM; pure calculation, no API
@@ -606,6 +606,7 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 | "Weather unavailable" | Check your internet connection. Open-Meteo is free and has no API key, so it should just work. |
 | No calendar events | Run `python joan_google_auth.py` to re-authenticate. Check that Calendar API is enabled in Google Cloud Console. |
 | Image not appearing on Joan | Verify `VSS_HOST`, `DEVICE_UUIDS` in `.env`. Check VSS web UI at `http://<VSS_HOST>:8081`. Ensure the device is "Allowed" in VSS. |
+| Google Doodle shows the same image every day | The screen now refreshes once per day. If you still see a stale doodle, restart the dashboard to clear the in-memory cache and confirm outbound access to `https://doodles.google/`. |
 | Joan shows "could not connect" | The VSS engine can't reach the image server. Check `IMAGE_SERVE_HOST` matches your Docker bridge gateway. Verify the iptables rule is in place: `sudo iptables -L INPUT -n \| grep 8888`. |
 | `ELF load command alignment not page-aligned` in VSS logs | You're on a Pi 5 with a 16KB page kernel. Add `kernel=kernel8.img` to `/boot/firmware/config.txt` and reboot. See [Pi 5 setup](#raspberry-pi-5-extra-steps). |
 | VSS `/backend/` push returns 400 / connection refused on port 11116 | This is expected on Pi 5 — the VSS engine's internal WebKit port doesn't bind. The dashboard uses its HTTP image server (port 8888) to bypass this. Ensure the dashboard service is running. |
