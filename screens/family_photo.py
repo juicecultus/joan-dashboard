@@ -2,7 +2,7 @@ from .shared import *
 
 # ── 4. Family Photo ──────────────────────────────────────────────────
 
-PHOTOS_DIR = os.environ.get("PHOTOS_DIR", os.path.join(os.path.dirname(__file__), "photos"))
+PHOTOS_DIR = os.environ.get("PHOTOS_DIR", "/Volumes/OWCM2RAID1/joan_photos")
 
 
 def render_family_photo() -> Image.Image:
