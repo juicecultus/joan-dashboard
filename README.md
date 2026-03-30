@@ -29,7 +29,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Maths Challenge** — 8 random problems (addition, multiplication, fractions, percentages, squares) for the kids
 - **RSS Article** — full-screen single article view with hero image, title, and summary from any RSS feed (default: [The Verge](https://www.theverge.com/)); rotates through top 12 entries daily; configurable via `RSS_FEED_URL`
 - **Stock Ticker** — live market prices and daily changes from [Yahoo Finance](https://finance.yahoo.com/), configurable tickers via `STOCK_TICKERS`
-- **Google Tasks Todo** — full-screen task list with checkboxes, pulled from all your Google Tasks lists
+- **Google Tasks Todo** — full-screen task list with checkboxes, pulled from all your Google Tasks lists, rendered in a large-type two-column layout for better across-the-room readability
 - **Moon Phase** — drawn moon with illumination %, phase name, crater detail, and countdown to next full/new moon (pure calculation, no API)
 - **Air Quality** — European/US AQI, PM2.5, PM10, NO₂, Ozone, UV Index from [Open-Meteo](https://open-meteo.com/en/docs/air-quality-api) (free, no API key)
 - **Analogue Clock** — beautiful clock face with hour/minute/second hands, date window, 60 tick marks, filling the full 13" display
@@ -89,6 +89,8 @@ Joan devices are thin clients. They don't run apps — instead, they periodicall
 
 Joan devices are thin clients — they don't run apps. They connect to a **Visionect Software Suite (VSS)** server that tells them what to display. By default, Joan devices point to `getjoan.com` (the paid cloud service). We replace that with a **self-hosted VSS** on your local network — **no Joan subscription required**.
 
+> **VSS v8 note:** On newer native ARM64 setups (for example Apple Silicon Macs running OrbStack with `visionect/visionect-server-v3:latest-arm`), VSS v8.5.5 listens on `11113` and expects TLS certificate files to exist at `/opt/visionect/vss/certs/server.crt` and `/opt/visionect/vss/certs/server.key`. Without those files, the gateway can drop Joan connections with `couldn't peek bytes for TLS: EOF` even when the device is configured for unencrypted PV3. A self-signed cert fixes this.
+
 ### 1. Install Docker on your Raspberry Pi
 
 ```bash
@@ -134,6 +136,8 @@ volumes:
 ```
 
 > **Note:** Use `visionect/visionect-server-v3-armhf` for Raspberry Pi (ARM). On x86/amd64 hosts, use `visionect/visionect-server-v3` instead.
+>
+> **Apple Silicon / OrbStack:** Use `visionect/visionect-server-v3:latest-arm`, `postgres:16`, and `redis:7`. Mount a cert volume such as `./certs:/opt/visionect/vss/certs` and expose `11113`. In v8.5.5, `11112` is not used by the gateway even if you map it in Docker.
 
 ```bash
 cd ~/vss
@@ -225,6 +229,7 @@ Then type these commands:
 ```
 server_tcp_get                           # show current server (e.g. we3.gw.getjoan.com 11113)
 server_tcp_set 192.168.1.100 11113       # replace with your Pi's IP
+encryption_mode_set 0                    # optional: disable outbound encryption for local VSS
 flash_save                               # persist to flash
 reboot                                   # reboot to connect to new server
 ```
@@ -389,7 +394,7 @@ Set `PHOTOS_DIR=/mnt/joan_photos` in your `.env` or systemd service. Photos are 
 | `maths` | 8 maths problems for kids | Generated locally |
 | `rss` | Latest headlines from RSS feed | Any RSS feed (default: The Verge) |
 | `stocks` | Stock prices + daily change | Yahoo Finance |
-| `todo` | Full-screen task list | Google Tasks API |
+| `todo` | Full-screen task list in a large-type 2-column grid with aligned checkboxes | Google Tasks API |
 | `moon` | Moon phase with drawn moon | Pure calculation |
 | `airquality` | AQI, pollutants, UV index | Open-Meteo Air Quality API |
 | `clock` | Analogue clock face | System time |
@@ -615,6 +620,7 @@ Set `WEATHER_LAT`, `WEATHER_LON`, and `WEATHER_LOCATION` in your `.env` file. Co
 | Google Doodle shows the same image every day | The screen now refreshes once per day. If you still see a stale doodle, restart the dashboard to clear the in-memory cache and confirm outbound access to `https://doodles.google/`. |
 | Hebrew text looks reversed or glyphs are missing | Install `python-bidi` from `requirements.txt` and a Hebrew-capable font package (for example `fonts-noto-core` or the platform's Hebrew fonts). Then restart the dashboard service. |
 | Joan shows "could not connect" | The VSS engine can't reach the image server. Check `IMAGE_SERVE_HOST` matches your Docker bridge gateway. Verify the iptables rule is in place: `sudo iptables -L INPUT -n \| grep 8888`. |
+| Joan shows connected in VSS but still drops off quickly on VSS v8 | Ensure `/opt/visionect/vss/certs/server.crt` and `server.key` exist inside the VSS container. On native ARM64 VSS v8.5.5, missing certs can cause `couldn't peek bytes for TLS: EOF` in gateway logs. |
 | `ELF load command alignment not page-aligned` in VSS logs | You're on a Pi 5 with a 16KB page kernel. Add `kernel=kernel8.img` to `/boot/firmware/config.txt` and reboot. See [Pi 5 setup](#raspberry-pi-5-extra-steps). |
 | VSS `/backend/` push returns 400 / connection refused on port 11116 | This is expected on Pi 5 — the VSS engine's internal WebKit port doesn't bind. The dashboard uses its HTTP image server (port 8888) to bypass this. Ensure the dashboard service is running. |
 | Engine crash-loops after restart | Port conflicts from stale processes. Do a full `docker compose down && docker compose up -d` instead of `docker compose restart`. |

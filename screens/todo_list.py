@@ -46,30 +46,77 @@ def render_todo_list() -> Image.Image:
         _footer(draw, now_str())
         return img
 
-    dy = 195
-    LINE_H = 56
-    BX = PAD + 20  # box left edge (same as dashboard B_L)
+    # ── 2-column grid layout ──────────────────────────────────────
+    TOP_Y = 195
+    BOT_Y = HEIGHT - 70          # leave room for footer
+    COL_GAP = 40                 # gap between columns
+    COL_W = (WIDTH - 2 * PAD - COL_GAP) // 2
+    BOX_SZ = 32                  # checkbox size (scaled with text)
+    BOX_PAD = 14                 # space after checkbox
+    title_font = get_font(39)
+    due_font = get_font(33)
 
-    for task in tasks[:14]:  # max 14 tasks for screen space
-        # Exact same checkbox rendering as main dashboard
-        box_top = dy + (LINE_H - 24) // 2
-        draw.rectangle([BX, box_top, BX + 24, box_top + 24], outline=60, width=2)
-        title = task["title"]
-        title_font = get_font(26)
-        title_max = WIDTH - (BX + 36) - (PAD + 120)
-        draw.text((BX + 36, dy + LINE_H // 2), _truncate_text(title_font, title, title_max),
-                  fill=20, font=title_font, anchor="lm")
+    # Split tasks into two columns (fill left first, then right)
+    max_visible = 20             # 10 per column
+    visible = tasks[:max_visible]
+    mid = (len(visible) + 1) // 2
+    col_tasks = [visible[:mid], visible[mid:]]
 
-        if task["due"]:
-            draw.text((WIDTH - PAD - 20, dy + LINE_H // 2), task["due"], fill=140, font=get_font(22), anchor="rm")
+    # Row height: divide available height evenly per column
+    rows_per_col = max(mid, 1)
+    avail_h = BOT_Y - TOP_Y
+    ROW_H = min(avail_h // rows_per_col, 80)
 
-        dy += LINE_H
-        if dy > HEIGHT - 80:
-            break
+    # Measure actual text visual height for precise vertical centering
+    _title_bbox = title_font.getbbox("Ag")
+    _title_h = _title_bbox[3] - _title_bbox[1]
+    _due_bbox = due_font.getbbox("Ag")
+    _due_h = _due_bbox[3] - _due_bbox[1]
+    BOX_Y_OFFSET = -7
 
-    # Task count footer
-    if len(tasks) > 14:
-        draw.text((WIDTH // 2, HEIGHT - 70), f"+{len(tasks) - 14} more tasks", fill=160, font=get_font(24), anchor="mm")
+    for ci, col in enumerate(col_tasks):
+        col_x = PAD + ci * (COL_W + COL_GAP)
+
+        for ri, task in enumerate(col):
+            row_y = TOP_Y + ri * ROW_H
+            row_cy = row_y + ROW_H // 2   # vertical centre of row
+
+            # Checkbox — aligned to text visual centre
+            text_cy = row_cy - _title_h // 2 - _title_bbox[1] + _title_h // 2
+            box_top = text_cy - BOX_SZ // 2 + BOX_Y_OFFSET
+            draw.rectangle(
+                [col_x, box_top, col_x + BOX_SZ, box_top + BOX_SZ],
+                outline=60, width=2,
+            )
+
+            # Due date (right-aligned in column) — measure first for title truncation
+            due_w = 0
+            if task["due"]:
+                due_w = _text_width(due_font, task["due"]) + 16
+                due_top = row_cy - _due_h // 2 - _due_bbox[1]
+                draw.text(
+                    (col_x + COL_W, due_top),
+                    task["due"], fill=140, font=due_font, anchor="rt",
+                )
+
+            # Title — vertically centred using measured bbox, not font metrics
+            text_x = col_x + BOX_SZ + BOX_PAD
+            title_max = COL_W - BOX_SZ - BOX_PAD - due_w
+            title_top = text_cy - _title_h // 2 - _title_bbox[1]
+            title_str = task["title"].replace("\n", " ").strip()
+            draw.text(
+                (text_x, title_top),
+                _truncate_text(title_font, title_str, title_max),
+                fill=20, font=title_font, anchor="lt",
+            )
+
+    # Task count overflow
+    if len(tasks) > max_visible:
+        draw.text(
+            (WIDTH // 2, HEIGHT - 70),
+            f"+{len(tasks) - max_visible} more tasks",
+            fill=160, font=get_font(24), anchor="mm",
+        )
 
     _footer(draw, now_str())
     return img

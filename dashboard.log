@@ -1,0 +1,93 @@
+[http] Image server started on port 8888
+[vss] Session configured: 35005a00-015... -> http://192.168.97.1:8888/35005a00-0150-4d35-5232-312000000000
+[playlist] Config empty or missing, using all screens
+[playlist] Rotating 35 screens, 180s each, active 07:00-21:00: ['dashboard', 'agenda', 'quote', 'countdown', 'photo', 'word', 'history', 'art', 'radar', 'joke', 'progress', 'maths', 'rss', 'stocks', 'todo', 'moon', 'airquality', 'clock', 'movies', 'learning', 'trains', 'bins', 'flipdate', 'github', 'doodle', 'proverb', 'holidays', 'flipclock', 'weatherglance', 'torah', 'bbc', 'element', 'cartoon', 'litmovies', 'buddha']
+[devices] Pushing to 1 device(s): 2 1600x1200
+[playlist] Config empty or missing, using all screens
+[15:49:40] Rendering: dashboard (1/35)
+[push] -> 35005a00-015... 1600x1200 (133957 bytes)
+[playlist] Next screen in 180s
+[http] Image server started on port 8888
+[vss] Session configured: 35005a00-015... -> http://0.250.250.254:8888/35005a00-0150-4d35-5232-312000000000
+[playlist] Config empty or missing, using all screens
+[playlist] Rotating 35 screens, 180s each, active 07:00-21:00: ['dashboard', 'agenda', 'quote', 'countdown', 'photo', 'word', 'history', 'art', 'radar', 'joke', 'progress', 'maths', 'rss', 'stocks', 'todo', 'moon', 'airquality', 'clock', 'movies', 'learning', 'trains', 'bins', 'flipdate', 'github', 'doodle', 'proverb', 'holidays', 'flipclock', 'weatherglance', 'torah', 'bbc', 'element', 'cartoon', 'litmovies', 'buddha']
+[devices] Pushing to 1 device(s): 2 1600x1200
+[playlist] Config empty or missing, using all screens
+[15:52:04] Rendering: dashboard (1/35)
+[push] -> 35005a00-015... 1600x1200 (132004 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[15:55:05] Rendering: agenda (2/35)
+[push] -> 35005a00-015... 1600x1200 (36448 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[15:58:07] Rendering: quote (3/35)
+[push] -> 35005a00-015... 1600x1200 (39160 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:01:07] Rendering: countdown (4/35)
+[push] -> 35005a00-015... 1600x1200 (46939 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:04:08] Rendering: photo (5/35)
+[photo] Error: [Errno 13] Permission denied: '/Volumes/OWCM2RAID1'
+[push] -> 35005a00-015... 1600x1200 (24511 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:08:47] Rendering: word (6/35)
+[push] -> 35005a00-015... 1600x1200 (57903 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:11:47] Rendering: history (7/35)
+[push] -> 35005a00-015... 1600x1200 (141532 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:14:47] Rendering: art (8/35)
+[push] -> 35005a00-015... 1600x1200 (513726 bytes)
+[push] (backend ok)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:17:50] Rendering: radar (9/35)
+[push] -> 35005a00-015... 1600x1200 (977794 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:20:53] Rendering: joke (10/35)
+[push] -> 35005a00-015... 1600x1200 (48303 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:23:53] Rendering: progress (11/35)
+[push] -> 35005a00-015... 1600x1200 (54867 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:26:54] Rendering: maths (12/35)
+[push] -> 35005a00-015... 1600x1200 (72163 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:29:54] Rendering: rss (13/35)
+[push] -> 35005a00-015... 1600x1200 (213230 bytes)
+[push] (backend ok)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:32:54] Rendering: stocks (14/35)
+[push] -> 35005a00-015... 1600x1200 (95066 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:35:57] Rendering: todo (15/35)
+[push] -> 35005a00-015... 1600x1200 (75620 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:38:58] Rendering: moon (16/35)
+[push] -> 35005a00-015... 1600x1200 (45927 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:41:58] Rendering: airquality (17/35)
+[push] -> 35005a00-015... 1600x1200 (60174 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:44:59] Rendering: clock (18/35)
+[push] -> 35005a00-015... 1600x1200 (34310 bytes)
+[playlist] Next screen in 180s
+[playlist] Config empty or missing, using all screens
+[16:47:59] Rendering: movies (19/35)
+[push] -> 35005a00-015... 1600x1200 (723663 bytes)
+[playlist] Next screen in 180s

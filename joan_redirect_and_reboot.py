@@ -23,7 +23,7 @@ PORT = "/dev/cu.usbserial-A507MY5N"
 BAUD = 115200
 
 # Your VSS server's IP address and port
-LOCAL_IP = "192.168.1.100"   # ← change this to your Pi / VSS host IP
+LOCAL_IP = "192.168.4.4"     # ← this Mac running VSS via OrbStack
 LOCAL_PORT = "11113"
 
 
