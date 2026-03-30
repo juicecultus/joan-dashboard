@@ -113,6 +113,17 @@ def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return FONT_CACHE[key]
 
 
+def _truncate_text(font, text: str, max_width: int) -> str:
+    if font.getlength(text) <= max_width:
+        return text
+    if max_width <= font.getlength("…"):
+        return "…"
+    trimmed = text
+    while trimmed and font.getlength(trimmed + "…") > max_width:
+        trimmed = trimmed[:-1]
+    return trimmed.rstrip() + "…"
+
+
 # --- Weather via Open-Meteo (free, no API key) ---
 WMO_CODES = {
     0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
@@ -555,7 +566,9 @@ def render_dashboard() -> Image.Image:
         for task in tasks[:max_tasks]:
             box_top = dy + (LINE_H - 24) // 2
             draw.rectangle([B_L, box_top, B_L + 24, box_top + 24], outline=60, width=2)
-            draw.text((B_L + 36, dy + LINE_H // 2), task["title"][:45], fill=20, font=get_font(26), anchor="lm")
+            task_font = get_font(26)
+            draw.text((B_L + 36, dy + LINE_H // 2), _truncate_text(task_font, task["title"], B_L_END - (B_L + 36)),
+                      fill=20, font=task_font, anchor="lm")
             dy += LINE_H
     else:
         draw.text((B_L, dy), "No tasks", fill=120, font=get_font(26), anchor="lt")
@@ -579,7 +592,9 @@ def render_dashboard() -> Image.Image:
         for ev in today_events[:5]:
             time_label = ev["time"] if ev["time"] else "All day"
             draw.text((B_R + 12, ry), time_label, fill=80, font=get_font(26, bold=True), anchor="lt")
-            draw.text((B_R + 120, ry), ev["title"][:40], fill=20, font=get_font(26), anchor="lt")
+            event_font = get_font(26)
+            draw.text((B_R + 120, ry), _truncate_text(event_font, ev["title"], B_R_END - (B_R + 120)),
+                      fill=20, font=event_font, anchor="lt")
             ry += 34
     else:
         draw.text((B_R + 12, ry), "No events today", fill=120, font=get_font(26), anchor="lt")
@@ -608,7 +623,9 @@ def render_dashboard() -> Image.Image:
         for ev in events:
             t = ev["time"] or ""
             prefix = f"{t} " if t else ""
-            draw.text((B_R + 12, ry), f"{prefix}{ev['title'][:42]}", fill=50, font=get_font(26), anchor="lt")
+            event_font = get_font(26)
+            draw.text((B_R + 12, ry), _truncate_text(event_font, f"{prefix}{ev['title']}", B_R_END - (B_R + 12)),
+                      fill=50, font=event_font, anchor="lt")
             ry += 32
         ry += 6
 

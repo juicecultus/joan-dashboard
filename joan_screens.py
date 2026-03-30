@@ -181,6 +181,28 @@ def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 12
     return y
 
 
+def _fit_font_to_width(text: str, max_width: int, start_size: int, min_size: int = 12,
+                       bold: bool = False) -> ImageFont.FreeTypeFont:
+    """Return the largest font that fits the supplied width."""
+    for size in range(start_size, min_size - 1, -1):
+        font = get_font(size, bold=bold)
+        if _text_width(font, text) <= max_width:
+            return font
+    return get_font(min_size, bold=bold)
+
+
+def _truncate_text(font, text: str, max_width: int) -> str:
+    """Trim text to fit max_width with an ellipsis."""
+    if _text_width(font, text) <= max_width:
+        return text
+    if max_width <= _text_width(font, "…"):
+        return "…"
+    trimmed = text
+    while trimmed and _text_width(font, trimmed + "…") > max_width:
+        trimmed = trimmed[:-1]
+    return trimmed.rstrip() + "…"
+
+
 def _dashboard_footer(draw):
     """Match the main dashboard footer: location + update time + room/battery."""
     footer_left = f"{WEATHER_LOCATION}  ·  Updated {datetime.now().strftime('%H:%M')}"
@@ -209,8 +231,10 @@ def render_daily_agenda() -> Image.Image:
     now = datetime.now()
 
     # Header: day and date
-    draw.text((WIDTH // 2, 60), now.strftime("%A"), fill=0, font=get_font(80, bold=True), anchor="mt")
-    draw.text((WIDTH // 2, 150), now.strftime("%d %B %Y"), fill=80, font=get_font(40), anchor="mt")
+    day_font = _fit_font_to_width(now.strftime("%A"), WIDTH - 120, 80, min_size=44, bold=True)
+    date_font = _fit_font_to_width(now.strftime("%d %B %Y"), WIDTH - 120, 40, min_size=24)
+    draw.text((WIDTH // 2, 60), now.strftime("%A"), fill=0, font=day_font, anchor="mt")
+    draw.text((WIDTH // 2, 150), now.strftime("%d %B %Y"), fill=80, font=date_font, anchor="mt")
 
     # Divider
     draw.line([(PAD, 210), (WIDTH - PAD, 210)], fill=180, width=2)
@@ -234,10 +258,15 @@ def render_daily_agenda() -> Image.Image:
                 # Time in large bold
                 draw.text((PAD + 20, y), t, fill=0, font=get_font(48, bold=True), anchor="lt")
                 # Title next to time
-                draw.text((PAD + 240, y), title[:50], fill=40, font=get_font(44), anchor="lt")
+                title_font = get_font(44)
+                title_max = WIDTH - (PAD + 240) - PAD
+                draw.text((PAD + 240, y), _truncate_text(title_font, title, title_max),
+                          fill=40, font=title_font, anchor="lt")
             else:
                 # All-day event
-                draw.text((PAD + 20, y), f"• {title[:55]}", fill=40, font=get_font(44), anchor="lt")
+                title_font = get_font(44)
+                draw.text((PAD + 20, y), f"• {_truncate_text(title_font, title, WIDTH - PAD * 2 - 20)}",
+                          fill=40, font=title_font, anchor="lt")
 
             y += 80
             # Subtle separator
@@ -277,19 +306,8 @@ def render_quote() -> Image.Image:
     quote_font = get_font(78)
     quote_lines = []
     for paragraph in quote_text.split("\n"):
-        words = paragraph.split()
-        line = ""
-        for word in words:
-            test = f"{line} {word}".strip()
-            if quote_font.getlength(test) > WIDTH - 200:
-                if line:
-                    quote_lines.append(line)
-                line = word
-            else:
-                line = test
-        if line:
-            quote_lines.append(line)
-    line_h = int(78 * 1.4)
+        quote_lines.extend(_wrap_text(quote_font, paragraph, WIDTH - 200) or [""])
+    line_h = max(int(_text_height(quote_font, "Ag") * 1.25), 88)
     block_h = line_h * len(quote_lines)
     start_y = max(280, (HEIGHT - block_h) // 2 - 40)
     y = start_y
@@ -348,19 +366,26 @@ def render_countdown() -> Image.Image:
             else:
                 day_text = f"{days} days"
 
-            draw.text((WIDTH // 2, y), title[:40], fill=0, font=get_font(50, bold=True), anchor="mt")
+            title_font = _fit_font_to_width(title, WIDTH - 200, 50, min_size=30, bold=True)
+            draw.text((WIDTH // 2, y), _truncate_text(title_font, title, WIDTH - 200),
+                      fill=0, font=title_font, anchor="mt")
             y += 80
-            draw.text((WIDTH // 2, y), day_text, fill=0, font=get_font(160, bold=True), anchor="mt")
+            day_font = _fit_font_to_width(day_text, WIDTH - 200, 160, min_size=92, bold=True)
+            draw.text((WIDTH // 2, y), day_text, fill=0, font=day_font, anchor="mt")
             y += 220
-            draw.text((WIDTH // 2, y), event_date.strftime("%A, %d %B"), fill=100, font=get_font(36), anchor="mt")
+            date_font = _fit_font_to_width(event_date.strftime("%A, %d %B"), WIDTH - 200, 36, min_size=24)
+            draw.text((WIDTH // 2, y), event_date.strftime("%A, %d %B"), fill=100, font=date_font, anchor="mt")
             y += 80
             draw.line([(PAD, y), (WIDTH - PAD, y)], fill=180, width=2)
             y += 40
         else:
             # Secondary countdowns — smaller
             label = "Tomorrow" if days == 1 else f"in {days} days"
-            draw.text((PAD + 40, y), f"{title[:45]}", fill=40, font=get_font(36), anchor="lt")
-            draw.text((WIDTH - PAD - 40, y), label, fill=0, font=get_font(36, bold=True), anchor="rt")
+            title_font = _fit_font_to_width(title, WIDTH - PAD * 2 - 180, 36, min_size=24)
+            draw.text((PAD + 40, y), _truncate_text(title_font, title, WIDTH - PAD * 2 - 180),
+                      fill=40, font=title_font, anchor="lt")
+            label_font = _fit_font_to_width(label, 160, 36, min_size=24, bold=True)
+            draw.text((WIDTH - PAD - 40, y), label, fill=0, font=label_font, anchor="rt")
             y += 60
 
     _footer(draw, now_str())
@@ -494,7 +519,9 @@ def render_word_of_day() -> Image.Image:
     draw.line([(PAD, 130), (WIDTH - PAD, 130)], fill=200, width=1)
 
     # Word — large
-    draw.text((WIDTH // 2, 220), word.capitalize(), fill=0, font=get_font(100, bold=True), anchor="mt")
+    word_font = _fit_font_to_width(word.capitalize(), WIDTH - 200, 100, min_size=56, bold=True)
+    draw.text((WIDTH // 2, 220), _truncate_text(word_font, word.capitalize(), WIDTH - 200),
+              fill=0, font=word_font, anchor="mt")
 
     # Phonetic
     if phonetic:
@@ -588,24 +615,13 @@ def render_this_day_in_history() -> Image.Image:
         # Event text (wrapped)
         font = get_font(45)
         max_w = WIDTH - PAD - 240
-        words = text.split()
-        lines = []
-        line = ""
-        for w in words:
-            test = f"{line} {w}".strip()
-            if font.getlength(test) > max_w:
-                if line:
-                    lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            lines.append(line)
+        lines = _wrap_text(font, text, max_w)
+        line_h = max(int(_text_height(font, "Ag") * 1.2), 54)
 
         tx = PAD + 200
         for ln in lines[:3]:  # fewer lines with larger font
             draw.text((tx, y), ln, fill=40, font=font, anchor="lt")
-            y += 54
+            y += line_h
         y += 24
 
         # Divider
@@ -795,20 +811,8 @@ def render_dad_joke() -> Image.Image:
 
     # Joke text — larger and vertically centered
     joke_font = get_font(78)
-    words = joke.split()
-    lines = []
-    line = ""
-    for word in words:
-        test = f"{line} {word}".strip()
-        if joke_font.getlength(test) > WIDTH - 200:
-            if line:
-                lines.append(line)
-            line = word
-        else:
-            line = test
-    if line:
-        lines.append(line)
-    line_h = int(78 * 1.35)
+    lines = _wrap_text(joke_font, joke, WIDTH - 200)
+    line_h = max(int(_text_height(joke_font, "Ag") * 1.25), 96)
     block_h = line_h * len(lines)
     start_y = max(240, (HEIGHT - block_h) // 2 - 40)
     y = start_y
@@ -1197,7 +1201,10 @@ def render_stock_ticker() -> Image.Image:
 
     for s in stocks:
         # Ticker name
-        draw.text((PAD + 20, y), s["name"], fill=0, font=get_font(34, bold=True), anchor="lt")
+        name_font = get_font(34, bold=True)
+        name_max = WIDTH // 2 - PAD - 40
+        draw.text((PAD + 20, y), _truncate_text(name_font, s["name"], name_max),
+                  fill=0, font=name_font, anchor="lt")
 
         # Price
         if s["currency"] == "GBp":
@@ -1284,9 +1291,10 @@ def render_todo_list() -> Image.Image:
         box_top = dy + (LINE_H - 24) // 2
         draw.rectangle([BX, box_top, BX + 24, box_top + 24], outline=60, width=2)
         title = task["title"]
-        if len(title) > 55:
-            title = title[:52] + "..."
-        draw.text((BX + 36, dy + LINE_H // 2), title, fill=20, font=get_font(26), anchor="lm")
+        title_font = get_font(26)
+        title_max = WIDTH - (BX + 36) - (PAD + 120)
+        draw.text((BX + 36, dy + LINE_H // 2), _truncate_text(title_font, title, title_max),
+                  fill=20, font=title_font, anchor="lm")
 
         if task["due"]:
             draw.text((WIDTH - PAD - 20, dy + LINE_H // 2), task["due"], fill=140, font=get_font(22), anchor="rm")
@@ -1736,24 +1744,11 @@ def render_upcoming_movies() -> Image.Image:
 
     y = 190
     # Title
-    y = _centered_text(draw, y, title, size=38, bold=True, fill=0, max_width=text_max) if not poster_loaded else y
-    if poster_loaded:
-        font = get_font(38, bold=True)
-        words = title.split()
-        lines, line = [], ""
-        for w in words:
-            test = f"{line} {w}".strip()
-            if font.getlength(test) > text_max:
-                if line:
-                    lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            lines.append(line)
-        for ln in lines[:2]:
-            draw.text((text_x, y), ln, fill=0, font=font, anchor="lt")
-            y += 50
+    title_font = get_font(38, bold=True)
+    title_lines = _wrap_text(title_font, title, text_max)
+    for ln in title_lines[:2]:
+        draw.text((text_x, y), ln, fill=0, font=title_font, anchor="lt")
+        y += 50
 
     y += 10
     if release:
@@ -1806,7 +1801,9 @@ def render_upcoming_movies() -> Image.Image:
                 date_str = datetime.strptime(rd, "%Y-%m-%d").strftime("%d %b")
             except ValueError:
                 pass
-        draw.text((PAD + 40, list_y), f"• {t[:50]}", fill=40, font=get_font(26), anchor="lt")
+        list_font = get_font(26)
+        draw.text((PAD + 40, list_y), f"• {_truncate_text(list_font, t, WIDTH - PAD * 2 - 140)}",
+                  fill=40, font=list_font, anchor="lt")
         if date_str:
             draw.text((WIDTH - PAD - 20, list_y), date_str, fill=140, font=get_font(22), anchor="rt")
         list_y += 45
@@ -1894,7 +1891,8 @@ def _draw_spelling_card(draw):
         draw.text((x - 215, y), str(i + 1), fill=80, font=get_font(36, bold=True), anchor="mm")
 
         # Word
-        draw.text((x - 170, y), word, fill=20, font=get_font(60), anchor="lm")
+        word_font = _fit_font_to_width(word, 290, 60, min_size=36)
+        draw.text((x - 170, y), _truncate_text(word_font, word, 290), fill=20, font=word_font, anchor="lm")
 
     # Encouragement
     prompts = ["Write each word 3 times!", "Cover and spell from memory!",
@@ -1926,7 +1924,8 @@ def _draw_times_table_card(draw):
         n = i + 1
 
         fact = f"{table} × {n:2d}  =  {table * n}"
-        draw.text((x, y), fact, fill=20, font=get_font(52), anchor="mm")
+        fact_font = _fit_font_to_width(fact, 290, 52, min_size=34)
+        draw.text((x, y), fact, fill=20, font=fact_font, anchor="mm")
 
     # Challenge at bottom
     challenges = [
@@ -1952,10 +1951,14 @@ def _draw_capitals_card(draw):
     y = 240
     for i, (country, capital) in enumerate(picks):
         # Country name (question)
-        draw.text((PAD + 80, y), f"{i + 1}.  {country}", fill=20, font=get_font(56), anchor="lm")
+        country_font = _fit_font_to_width(f"{i + 1}.  {country}", WIDTH // 2 - PAD - 40, 56, min_size=34)
+        draw.text((PAD + 80, y), _truncate_text(country_font, f"{i + 1}.  {country}", WIDTH // 2 - PAD - 40),
+                  fill=20, font=country_font, anchor="lm")
 
         # Answer upside-down style (light grey, smaller)
-        draw.text((WIDTH - PAD - 40, y), capital, fill=190, font=get_font(40), anchor="rm")
+        cap_font = _fit_font_to_width(capital, WIDTH // 2 - PAD - 60, 40, min_size=24)
+        draw.text((WIDTH - PAD - 40, y), _truncate_text(cap_font, capital, WIDTH // 2 - PAD - 60),
+                  fill=190, font=cap_font, anchor="rm")
 
         y += 120
 
@@ -2001,10 +2004,13 @@ def _draw_quiz_card(draw):
     for i, (q, a) in enumerate(picks):
         # Question
         draw.text((PAD + 40, y), f"Q{i + 1}.", fill=80, font=get_font(44, bold=True), anchor="lm")
-        draw.text((PAD + 130, y), q, fill=20, font=get_font(44), anchor="lm")
+        q_font = _fit_font_to_width(q, WIDTH - PAD * 2 - 220, 44, min_size=30)
+        draw.text((PAD + 130, y), _truncate_text(q_font, q, WIDTH - PAD * 2 - 220), fill=20, font=q_font, anchor="lm")
 
         # Answer (very light)
-        draw.text((WIDTH - PAD - 40, y + 55), a, fill=190, font=get_font(34), anchor="rm")
+        a_font = _fit_font_to_width(a, WIDTH // 2 - PAD - 40, 34, min_size=22)
+        draw.text((WIDTH - PAD - 40, y + 55), _truncate_text(a_font, a, WIDTH // 2 - PAD - 40),
+                  fill=190, font=a_font, anchor="rm")
 
         y += 140
 
@@ -2280,8 +2286,9 @@ def render_bins() -> Image.Image:
 
         _draw_bin_icon(draw, cx, cy, icon_size, fill, label)
         # Label below icon
-        draw.text((cx, cy + icon_size // 2 + 40), name,
-                  fill=40, font=get_font(24, bold=True), anchor="mt")
+        name_font = get_font(24, bold=True)
+        draw.text((cx, cy + icon_size // 2 + 40), _truncate_text(name_font, name, icon_size + 30),
+                  fill=40, font=name_font, anchor="mt")
 
     y = cy + icon_size // 2 + 80
 
@@ -2308,7 +2315,8 @@ def render_bins() -> Image.Image:
 
             types_str = ", ".join(bin_types)
             draw.text((PAD + 60, y), day_label, fill=40, font=row_font_bold, anchor="lt")
-            draw.text((450, y), types_str, fill=80, font=row_font, anchor="lt")
+            types_max = WIDTH - 450 - PAD - 90
+            draw.text((450, y), _truncate_text(row_font, types_str, types_max), fill=80, font=row_font, anchor="lt")
 
             if days >= 0:
                 tag = f"{days}d"
@@ -2332,8 +2340,8 @@ def _draw_flip_panel(img, draw, x, y, w, h, text, font_size, radius=24):
     mid_y = y + h // 2
     draw.line([(x, mid_y), (x + w, mid_y)], fill=60, width=2)
     # White text centered
-    font = get_font(font_size, bold=True)
-    draw.text((x + w // 2, y + h // 2), text, fill=255, font=font, anchor="mm")
+    font = _fit_font_to_width(text, w - 40, font_size, min_size=max(24, font_size // 3), bold=True)
+    draw.text((x + w // 2, y + h // 2), _truncate_text(font, text, w - 40), fill=255, font=font, anchor="mm")
 
 
 def render_flip_date() -> Image.Image:
@@ -2470,11 +2478,12 @@ def render_bank_holidays() -> Image.Image:
         # Date column
         date_str = hol["date"].strftime("%a %-d %b %Y")
         date_font = get_font(30, bold=is_next)
-        draw.text((PAD, y + 10), date_str, fill=30 if is_next else 80, font=date_font, anchor="lt")
+        draw.text((PAD + 20, y), date_str, fill=120 if is_next else 140, font=date_font, anchor="lt")
 
         # Holiday name
-        name_font = get_font(32, bold=is_next)
-        draw.text((420, y + 10), hol["title"], fill=0 if is_next else 60, font=name_font, anchor="lt")
+        title_font = _fit_font_to_width(hol["title"], WIDTH - (PAD + 260) - PAD, 34, min_size=24, bold=is_next)
+        draw.text((PAD + 240, y), _truncate_text(title_font, hol["title"], WIDTH - (PAD + 260) - PAD),
+                  fill=0 if is_next else 40, font=title_font, anchor="lt")
 
         # Days away badge
         if hol["days"] == 0:
@@ -2907,29 +2916,13 @@ def render_bbc_news() -> Image.Image:
             # Truncate title to fit
             title_font = get_font(36, bold=True)
             max_tw = img_w - 30
-            if title_font.getlength(title) > max_tw * 3:
-                while title_font.getlength(title + "...") > max_tw * 3:
-                    title = title[:-1]
-                title = title.rstrip() + "..."
-            # Word-wrap into 3 lines max
-            words = title.split()
-            lines = []
-            line = ""
-            for w in words:
-                test = f"{line} {w}".strip()
-                if title_font.getlength(test) > max_tw:
-                    if line:
-                        lines.append(line)
-                    line = w
-                else:
-                    line = test
-            if line:
-                lines.append(line)
+            lines = _wrap_text(title_font, title, max_tw)
             lines = lines[:3]
-            ty = top_y + img_h - 24 - len(lines) * 42
+            line_h = max(int(_text_height(title_font, "Ag") * 1.15), 40)
+            ty = top_y + img_h - 24 - len(lines) * line_h
             for ln in lines:
                 draw.text((ax + 14, ty), ln, fill=240, font=title_font, anchor="lt")
-                ty += 42
+                ty += line_h
 
     # Remaining headlines as text list
     list_y = top_y + img_h + 30
@@ -2944,10 +2937,7 @@ def render_bbc_news() -> Image.Image:
         # Truncate
         h_font = get_font(36)
         max_w = WIDTH - PAD * 2
-        if h_font.getlength(title) > max_w:
-            while len(title) > 10 and h_font.getlength(title + "...") > max_w:
-                title = title[:-1]
-            title = title.rstrip() + "..."
+        title = _truncate_text(h_font, title, max_w)
 
         draw.text((PAD, list_y + 2), title, fill=20, font=h_font, anchor="lt")
         list_y += 56
@@ -3034,7 +3024,9 @@ def render_element_of_day() -> Image.Image:
         draw.text((cx + cw // 2, cy + 17), category, fill=230, font=cat_font, anchor="mm")
 
     # --- Element name header (right side) ---
-    draw.text((420, 90), name.upper(), fill=20, font=get_font(56, bold=True), anchor="lt")
+    header_font = _fit_font_to_width(name.upper(), WIDTH - 420 - PAD, 56, min_size=30, bold=True)
+    draw.text((420, 90), _truncate_text(header_font, name.upper(), WIDTH - 420 - PAD),
+              fill=20, font=header_font, anchor="lt")
     draw.line([(420, 155), (WIDTH - PAD, 155)], fill=120, width=2)
 
     # --- Properties grid (right side, two columns) ---
@@ -3065,21 +3057,26 @@ def render_element_of_day() -> Image.Image:
         if not value:
             continue
         # Label in rounded box
-        lw = label_font.getlength(label) + 12
+        label_text = _truncate_text(label_font, label, 200)
+        lw = label_font.getlength(label_text) + 12
         draw.rounded_rectangle([420, ly, 420 + lw, ly + 30], radius=4, outline=40, width=1)
-        draw.text((426, ly + 15), label, fill=40, font=label_font, anchor="lm")
+        draw.text((426, ly + 15), label_text, fill=40, font=label_font, anchor="lm")
         # Value next to it
-        draw.text((430 + lw, ly + 15), value, fill=20, font=value_font, anchor="lm")
+        value_max = WIDTH - (430 + lw) - PAD
+        draw.text((430 + lw, ly + 15), _truncate_text(value_font, value, value_max), fill=20, font=value_font, anchor="lm")
         ly += row_h
 
     for label, value in props_right:
         if not value:
             continue
-        lw = label_font.getlength(label) + 12
+        label_text = _truncate_text(label_font, label, 200)
+        lw = label_font.getlength(label_text) + 12
         rx = 720
         draw.rounded_rectangle([rx, ry, rx + lw, ry + 30], radius=4, outline=40, width=1)
-        draw.text((rx + 6, ry + 15), label, fill=40, font=label_font, anchor="lm")
-        draw.text((rx + lw + 10, ry + 15), value, fill=20, font=value_font, anchor="lm")
+        draw.text((rx + 6, ry + 15), label_text, fill=40, font=label_font, anchor="lm")
+        value_max = WIDTH - (rx + lw + 10) - PAD
+        draw.text((rx + lw + 10, ry + 15), _truncate_text(value_font, value, value_max),
+                  fill=20, font=value_font, anchor="lm")
         ry += row_h
 
     return img
@@ -3143,11 +3140,14 @@ def render_github_trending() -> Image.Image:
             owner_font = get_font(28)
             name_font = get_font(30, bold=True)
             owner_text = parts[0] + " / "
+            owner_text = _truncate_text(owner_font, owner_text, col_w - 120)
             draw.text((name_x, y), owner_text, fill=80, font=owner_font, anchor="lt")
-            owner_w = owner_font.getlength(owner_text)
-            draw.text((name_x + owner_w, y), parts[1], fill=0, font=name_font, anchor="lt")
+            owner_w = _text_width(owner_font, owner_text)
+            repo_max = col_w - 50 - owner_w
+            draw.text((name_x + owner_w, y), _truncate_text(name_font, parts[1], repo_max), fill=0, font=name_font, anchor="lt")
         else:
-            draw.text((name_x, y), repo_name, fill=0, font=get_font(30, bold=True), anchor="lt")
+            repo_font = get_font(30, bold=True)
+            draw.text((name_x, y), _truncate_text(repo_font, repo_name, col_w - 50), fill=0, font=repo_font, anchor="lt")
 
         # Description (truncated)
         desc = repo.get("desc", "")
@@ -3195,8 +3195,7 @@ def render_github_trending() -> Image.Image:
         if change:
             change_str = f"* {change:,} today"
             # Right-align the change in the column
-            cw = stats_bold.getlength(change_str)
-            draw.text((col_x + col_w - 5, stats_y), change_str,
+            draw.text((col_x + col_w - 5, stats_y), _truncate_text(stats_bold, change_str, col_w - 20),
                       fill=40, font=stats_bold, anchor="rt")
 
         # Separator line (except last in column)
@@ -3492,7 +3491,9 @@ def render_trains() -> Image.Image:
             dest_str = svc["destination"]
             if svc["via"]:
                 dest_str += f"  {svc['via']}"
-            draw.text((PAD + 20, r2y), dest_str, fill=0, font=get_font(34, bold=True), anchor="lt")
+            dest_font = get_font(34, bold=True)
+            dest_max = WIDTH - (PAD + 20) - 360
+            draw.text((PAD + 20, r2y), _truncate_text(dest_font, dest_str, dest_max), fill=0, font=dest_font, anchor="lt")
 
             # Operator + coaches (right-aligned)
             info_parts = []
@@ -3503,8 +3504,10 @@ def render_trains() -> Image.Image:
             if svc["arrival"]:
                 info_parts.append(f"Arr {svc['arrival']}")
             if info_parts:
-                draw.text((WIDTH - PAD - 20, r2y + 5), "  |  ".join(info_parts),
-                          fill=100, font=get_font(26), anchor="rt")
+                info_font = get_font(26)
+                info_str = "  |  ".join(info_parts)
+                draw.text((WIDTH - PAD - 20, r2y + 5), _truncate_text(info_font, info_str, 320),
+                          fill=100, font=info_font, anchor="rt")
 
             # Row 3: Calling points
             r3y = r2y + 45
@@ -3547,9 +3550,9 @@ def render_trains() -> Image.Image:
             dest_str = svc["destination"]
             if svc["via"]:
                 dest_str += f" {svc['via']}"
-            if len(dest_str) > 28:
-                dest_str = dest_str[:26] + "…"
-            draw.text((PAD + 540, cy_r), dest_str, fill=0, font=get_font(32, bold=True), anchor="lm")
+            dest_font = get_font(32, bold=True)
+            draw.text((PAD + 540, cy_r), _truncate_text(dest_font, dest_str, WIDTH - (PAD + 540) - 140),
+                      fill=0, font=dest_font, anchor="lm")
             # Operator code
             draw.text((WIDTH - PAD - 10, cy_r), svc["operator_code"], fill=100, font=get_font(28), anchor="rm")
             # Row separator
@@ -3929,11 +3932,12 @@ def render_buddha_quote() -> Image.Image:
     lines = _wrap_text(quote_font, text, max_w)
     lines = lines[:8]  # cap at 8 lines
 
-    total_h = len(lines) * 60
+    line_h = max(int(_text_height(quote_font, "Ag") * 1.25), 56)
+    total_h = len(lines) * line_h
     start_y = max(200, (HEIGHT - 100 - total_h) // 2)
     for ln in lines:
         draw.text((WIDTH // 2, start_y), ln, fill=20, font=quote_font, anchor="mt")
-        start_y += 60
+        start_y += line_h
 
     # Closing quote + attribution
     draw.text((WIDTH // 2, start_y + 20), f"\u2014 {by}", fill=100,
