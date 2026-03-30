@@ -249,3 +249,10 @@ def _footer(draw, text=""):
 
 def now_str():
     return datetime.now().strftime("%H:%M")
+
+
+__all__ = [
+    name
+    for name in globals()
+    if not name.startswith("__")
+]
