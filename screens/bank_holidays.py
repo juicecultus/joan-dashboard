@@ -46,17 +46,20 @@ def render_bank_holidays() -> Image.Image:
 
     y = header_h + 40
     row_h = 85
+    date_x = PAD + 20
+    title_x = PAD + 300
+    title_max = WIDTH - title_x - PAD - 160
     for i, hol in enumerate(upcoming):
         is_next = (i == 0)
 
         # Date column
         date_str = hol["date"].strftime("%a %-d %b %Y")
         date_font = get_font(30, bold=is_next)
-        draw.text((PAD + 20, y), date_str, fill=120 if is_next else 140, font=date_font, anchor="lt")
+        draw.text((date_x, y), date_str, fill=120 if is_next else 140, font=date_font, anchor="lt")
 
         # Holiday name
-        title_font = _fit_font_to_width(hol["title"], WIDTH - (PAD + 260) - PAD, 34, min_size=24, bold=is_next)
-        draw.text((PAD + 240, y), _truncate_text(title_font, hol["title"], WIDTH - (PAD + 260) - PAD),
+        title_font = _fit_font_to_width(hol["title"], title_max, 34, min_size=24, bold=is_next)
+        draw.text((title_x, y), _truncate_text(title_font, hol["title"], title_max),
                   fill=0 if is_next else 40, font=title_font, anchor="lt")
 
         # Days away badge

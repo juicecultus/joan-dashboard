@@ -42,23 +42,27 @@ def render_maths_challenge() -> Image.Image:
 
     random.shuffle(problems)
 
-    # Draw problems in two columns
-    col_x = [320, 960]
-    start_y = 220
-    row_h = 110
+    # Draw problems in two centered columns
+    col_left = 120
+    col_right = 840
+    col_text_w = 560
+    content_top = 180
+    content_bottom = HEIGHT - 160
+    row_h = 130
+    grid_h = 4 * row_h
+    start_y = content_top + max(0, ((content_bottom - content_top) - grid_h) // 2)
+    problem_font = _fit_font_to_width("999 × 999 = ?", col_text_w, 80, min_size=64)
 
-    for i, problem in enumerate(problems):
-        col = i % 2
-        row = i // 2
-        x = col_x[col]
-        y = start_y + row * row_h
+    for row in range(4):
+        for col in range(2):
+            i = row * 2 + col
+            problem = problems[i]
+            area_x = col_left if col == 0 else col_right
+            y = start_y + row * row_h
 
-        # Number circle
-        draw.ellipse([x - 180, y - 20, x - 140, y + 20], outline=80, width=2)
-        draw.text((x - 160, y), str(i + 1), fill=80, font=get_font(22, bold=True), anchor="mm")
-
-        # Problem text
-        draw.text((x - 110, y), problem, fill=20, font=get_font(40), anchor="lm")
+            # Problem text
+            draw.text((area_x, y), _truncate_text(problem_font, problem, col_text_w),
+                      fill=20, font=problem_font, anchor="lm")
 
     # Footer encouragement
     encouragements = [

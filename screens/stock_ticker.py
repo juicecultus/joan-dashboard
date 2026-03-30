@@ -2,13 +2,25 @@ from .shared import *
 
 # ── 13. Stock Ticker ────────────────────────────────────────────────
 
-STOCK_TICKERS = os.environ.get("STOCK_TICKERS", "^FTSE,^GSPC,AAPL,MSFT,GOOGL,AMZN").split(",")
+STOCK_TICKERS = os.environ.get(
+    "STOCK_TICKERS",
+    "^FTSE,^GSPC,AAPL,MSFT,GOOGL,AMZN,TSL,NVDA,META,ARM",
+).split(",")
+
+
+def _quote_symbol(ticker):
+    """Resolve aliases to a live Yahoo Finance symbol when needed."""
+    aliases = {
+        "TSL": "TSLA",  # user requested TSL, but Tesla's live symbol is TSLA
+    }
+    return aliases.get(ticker, ticker)
 
 
 def _fetch_stock_data(ticker):
     """Fetch current price and change from Yahoo Finance."""
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
+        quote_symbol = _quote_symbol(ticker)
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote_symbol}?range=1d&interval=1d"
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=10)
         data = r.json()
@@ -36,7 +48,8 @@ def _ticker_name(ticker):
         "^FTSE": "FTSE 100", "^GSPC": "S&P 500", "^DJI": "Dow Jones",
         "^IXIC": "NASDAQ", "^N225": "Nikkei 225",
         "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet",
-        "AMZN": "Amazon", "TSLA": "Tesla", "META": "Meta",
+        "AMZN": "Amazon", "TSLA": "Tesla", "TSL": "Tesla",
+        "META": "Meta", "ARM": "Arm",
         "NVDA": "NVIDIA", "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum",
     }
     return names.get(ticker, ticker)
@@ -69,18 +82,31 @@ def render_stock_ticker() -> Image.Image:
         _footer(draw, now_str())
         return img
 
-    y = 190
-    row_h = (HEIGHT - 280) // min(len(stocks), 8)
-    row_h = min(row_h, 120)
+    # Two-column grid of stock cards
+    content_top = 185
+    footer_y = HEIGHT - 70
+    gap = 40
+    col_w = int((WIDTH - PAD * 2 - gap) / 2)
+    row_h = 125
+    rows = (len(stocks) + 1) // 2
+    grid_h = rows * row_h
+    start_y = content_top + max(0, ((footer_y - content_top) - grid_h) // 2)
 
-    for s in stocks:
-        # Ticker name
-        name_font = get_font(34, bold=True)
-        name_max = WIDTH // 2 - PAD - 40
-        draw.text((PAD + 20, y), _truncate_text(name_font, s["name"], name_max),
+    for idx, s in enumerate(stocks):
+        col = idx % 2
+        row = idx // 2
+        x = PAD + col * (col_w + gap)
+        y = start_y + row * row_h
+
+        # Optional card background for readability
+        draw.rounded_rectangle([x, y, x + col_w, y + row_h - 10], radius=10, fill=248, outline=220, width=1)
+
+        # Top line: name + price
+        name_font = get_font(30, bold=True)
+        name_max = col_w - 20
+        draw.text((x + 12, y + 10), _truncate_text(name_font, s["name"], name_max),
                   fill=0, font=name_font, anchor="lt")
 
-        # Price
         if s["currency"] == "GBp":
             price_str = f"{s['price']:,.0f}p"
         elif s["currency"] == "GBP":
@@ -92,19 +118,21 @@ def render_stock_ticker() -> Image.Image:
         else:
             price_str = f"{s['price']:,.2f}"
 
-        draw.text((WIDTH - PAD - 20, y), price_str, fill=0, font=get_font(34, bold=True), anchor="rt")
+        draw.text((x + col_w - 12, y + 10), price_str, fill=0, font=get_font(30, bold=True), anchor="rt")
 
-        # Change line
-        arrow = "▲" if s["change"] >= 0 else "▼"
-        change_str = f"{arrow} {abs(s['change']):,.2f} ({abs(s['change_pct']):.2f}%)"
+        # Bottom line: ticker + change
         fill = 40 if s["change"] >= 0 else 80
-        draw.text((PAD + 20, y + 42), s["ticker"], fill=160, font=get_font(22), anchor="lt")
-        draw.text((WIDTH - PAD - 20, y + 42), change_str, fill=fill, font=get_font(26), anchor="rt")
+        draw.text((x + 12, y + 58), s["ticker"], fill=160, font=get_font(22), anchor="lt")
 
-        y += row_h
+        change_text = f"{abs(s['change']):,.2f} ({abs(s['change_pct']):.2f}%)"
+        change_font = get_font(24)
+        tw = _text_width(change_font, change_text)
 
-        if y > HEIGHT - 80:
-            break
+        # Draw arrow then text
+        arrow_x = x + col_w - 12 - tw - 25
+        arrow_y = y + 58 + 14
+        _draw_arrow(draw, arrow_x, arrow_y, 18, direction="up" if s["change"] >= 0 else "down", fill=fill)
+        draw.text((x + col_w - 12, y + 58), change_text, fill=fill, font=change_font, anchor="rt")
 
     _footer(draw, now_str())
     return img

@@ -43,7 +43,8 @@ def render_daily_agenda() -> Image.Image:
             else:
                 # All-day event
                 title_font = get_font(44)
-                draw.text((PAD + 20, y), f"• {_truncate_text(title_font, title, WIDTH - PAD * 2 - 20)}",
+                _draw_bullet(draw, PAD + 35, y + 22, 10, fill=40)
+                draw.text((PAD + 60, y), _truncate_text(title_font, title, WIDTH - PAD * 2 - 60),
                           fill=40, font=title_font, anchor="lt")
 
             y += 80

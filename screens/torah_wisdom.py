@@ -68,77 +68,63 @@ def _fetch_torah_verse():
 
 
 def render_torah_wisdom() -> Image.Image:
-    """Render a Daily Torah Wisdom screen with English + Hebrew."""
-    img = Image.new("L", (WIDTH, HEIGHT), 225)
+    """Render a Daily Torah Wisdom screen following the Word of the Day layout."""
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
     verse = _cache_fetch("torah_wisdom", 43200, 172800, _fetch_torah_verse)
 
-    # Footer bar
-    footer_h = 60
-    footer_y = HEIGHT - footer_h
-    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=180)
-    draw.text((PAD, footer_y + footer_h // 2), "Daily Torah Wisdom",
-              fill=30, font=get_font(28, bold=True), anchor="lm")
-
     if not verse:
         _centered_text(draw, HEIGHT // 2, "No verse available", 40, fill=80)
+        _footer(draw, now_str())
         return img
 
     en_text = verse.get("en", "")
     he_text = verse.get("he", "")
     ref_str = verse.get("ref", "")
 
-    content_top = 28
-    content_bottom = footer_y - 18
-    content_height = content_bottom - content_top
-    split_y = content_top + content_height // 2
+    # Header
+    draw.text((WIDTH // 2, 80), "Daily Torah Wisdom", fill=120, font=get_font(32), anchor="mt")
+    draw.line([(PAD, 130), (WIDTH - PAD, 130)], fill=200, width=1)
 
-    # Divider and language labels
-    draw.line([(PAD, split_y), (WIDTH - PAD, split_y)], fill=150, width=2)
-    draw.text((WIDTH // 2, content_top), "English", fill=80, font=get_font(24, bold=True), anchor="mt")
-    draw.text((WIDTH // 2, split_y + 12), "Hebrew", fill=80, font=get_font(24, bold=True), anchor="mt")
+    # Reference — large (like the 'Word' in Word of Day)
+    ref_font = _fit_font_to_width(ref_str, WIDTH - 200, 100, min_size=56, bold=True)
+    draw.text((WIDTH // 2, 220), _truncate_text(ref_font, ref_str, WIDTH - 200),
+              fill=0, font=ref_font, anchor="mt")
 
-    # English text in the top half
-    en_block_top = content_top + 44
-    en_block_height = max(20, split_y - en_block_top - 32)
-    en_text = re.sub(r"\s+", " ", en_text).strip()
-    if len(en_text) > 320:
-        en_text = en_text[:317].rstrip() + "..."
-    _draw_wrapped_block(
-        draw,
-        PAD,
-        en_block_top,
-        WIDTH - PAD * 2,
-        en_block_height,
-        en_text,
-        34,
-        bold=True,
-        fill=30,
-        rtl=False,
-        max_lines=6,
-    )
-    if ref_str:
-        draw.text((WIDTH // 2, split_y - 18), f"— {ref_str}", fill=85, font=get_font(22), anchor="mt")
+    # Divider line for content
+    y = 360
+    draw.line([(PAD + 100, y), (WIDTH - PAD - 100, y)], fill=200, width=1)
+    y += 40
 
-    # Hebrew text in the bottom half
-    if he_text:
-        he_block_top = split_y + 42
-        he_block_height = max(20, content_bottom - he_block_top - 12)
-        if len(he_text) > 260:
-            he_text = he_text[:257].rstrip() + "..."
-        _draw_wrapped_block(
-            draw,
-            PAD,
-            he_block_top,
-            WIDTH - PAD * 2,
-            he_block_height,
-            he_text,
-            36,
-            bold=False,
-            fill=55,
-            rtl=True,
-            max_lines=6,
-        )
+    # Content: English + Hebrew centered vertically in remaining space
+    en_font = get_font(52, bold=True)
+    he_font = _get_hebrew_font(56)
+    
+    max_w = WIDTH - 240
+    en_lines = _wrap_text(en_font, en_text, max_w) if en_text else []
+    he_lines = _wrap_text(he_font, he_text, max_w, rtl=True) if he_text else []
 
+    en_h = int(52 * 1.3) * len(en_lines)
+    he_h = int(56 * 1.3) * len(he_lines)
+    gap = 60 if en_lines and he_lines else 0
+    total_h = en_h + gap + he_h
+
+    content_top = y
+    content_bottom = HEIGHT - 120
+    y = content_top + max(0, (content_bottom - content_top - total_h) // 2)
+
+    # Draw English
+    for ln in en_lines:
+        draw.text((WIDTH // 2, y), ln, fill=30, font=en_font, anchor="mt")
+        y += int(52 * 1.3)
+
+    # Draw Hebrew
+    if he_lines:
+        y += gap
+        for ln in he_lines:
+            draw.text((WIDTH // 2, y), ln, fill=60, font=he_font, anchor="mt")
+            y += int(56 * 1.3)
+
+    _footer(draw, now_str())
     return img

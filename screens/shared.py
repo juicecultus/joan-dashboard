@@ -43,10 +43,26 @@ def _get_cjk_font(size: int) -> ImageFont.FreeTypeFont:
     if key not in _INTL_FONT_CACHE:
         candidates = [
             "/Library/Fonts/Arial Unicode.ttf",
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/PingFang SC.ttc",
+            "/System/Library/Fonts/PingFang TC.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB W3.ttc",
             "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/STSong Medium.ttc",
+            "/System/Library/Fonts/Supplemental/PingFang.ttc",
+            "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttc",
             "/System/Library/Fonts/Supplemental/Songti.ttc",
+            "/System/Library/Fonts/Supplemental/SimHei.ttf",
+            "/System/Library/Fonts/Supplemental/SimSun.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
             "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+            "/usr/share/fonts/truetype/noto/NotoSansSC-Regular.otf",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         ]
         for path in candidates:
             try:
@@ -249,6 +265,32 @@ def _footer(draw, text=""):
 
 def now_str():
     return datetime.now().strftime("%H:%M")
+
+
+def _draw_arrow(draw, x, y, size, direction="up", fill=0):
+    """Draw a robust vector arrow (triangle) at (x, y)."""
+    half = size // 2
+    if direction == "up":
+        points = [(x, y - half), (x - half, y + half), (x + half, y + half)]
+    else:
+        points = [(x, y + half), (x - half, y - half), (x + half, y - half)]
+    draw.polygon(points, fill=fill)
+
+
+def _draw_star(draw, x, y, size, fill=0):
+    """Draw a simple 5-pointed star centered at (x, y)."""
+    points = []
+    for i in range(10):
+        angle = math.radians(i * 36 - 90)
+        r = size if i % 2 == 0 else size // 2.5
+        points.append((x + r * math.cos(angle), y + r * math.sin(angle)))
+    draw.polygon(points, fill=fill)
+
+
+def _draw_bullet(draw, x, y, size, fill=0):
+    """Draw a simple circular bullet centered at (x, y)."""
+    r = size // 2
+    draw.ellipse([x - r, y - r, x + r, y + r], fill=fill)
 
 
 __all__ = [

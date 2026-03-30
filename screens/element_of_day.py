@@ -51,40 +51,46 @@ def render_element_of_day() -> Image.Image:
     affinity = el.get("electron_affinity", "")
     ionization = el.get("ionization_energy", "")
 
-    # --- Element card (left side) ---
-    card_x, card_y = 60, 80
-    card_w, card_h = 300, 420
+    # --- Header ---
+    title_font = _fit_font_to_width(name.upper(), WIDTH - PAD * 2, 76, min_size=50, bold=True)
+    draw.text((WIDTH // 2, 72), _truncate_text(title_font, name.upper(), WIDTH - PAD * 2),
+              fill=20, font=title_font, anchor="mt")
+    draw.line([(PAD, 166), (WIDTH - PAD, 166)], fill=120, width=3)
+
+    # --- Element card (left column) ---
+    card_x = 60
+    gap = 48
+    card_w = int((WIDTH - PAD * 2 - gap) / 2)
+    card_h = int(HEIGHT * 0.7)
+    content_top = 194
+    card_y = content_top + max(0, ((HEIGHT - footer_h - content_top - 20) - card_h) // 2)
     draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h],
                    fill=255, outline=20, width=3)
 
     # Atomic number (top-left of card)
-    draw.text((card_x + 20, card_y + 20), str(num),
-              fill=30, font=get_font(64, bold=True), anchor="lt")
+    draw.text((card_x + 22, card_y + 22), str(num),
+              fill=30, font=get_font(82, bold=True), anchor="lt")
     # Atomic mass (top-right of card)
-    draw.text((card_x + card_w - 20, card_y + 30), str(mass),
-              fill=60, font=get_font(36), anchor="rt")
+    draw.text((card_x + card_w - 22, card_y + 30), str(mass),
+              fill=60, font=get_font(42), anchor="rt")
     # Symbol (large, centered)
-    draw.text((card_x + card_w // 2, card_y + 200), symbol,
-              fill=10, font=get_font(160, bold=True), anchor="mm")
+    draw.text((card_x + card_w // 2, card_y + int(card_h * 0.43)), symbol,
+              fill=10, font=get_font(190, bold=True), anchor="mm")
     # Name below symbol
-    draw.text((card_x + card_w // 2, card_y + 310), name,
-              fill=30, font=get_font(32), anchor="mt")
+    draw.text((card_x + card_w // 2, card_y + int(card_h * 0.67)), name,
+              fill=30, font=get_font(40), anchor="mt")
     # Category badge
     if category:
-        cat_font = get_font(22, bold=True)
-        cw = cat_font.getlength(category) + 20
+        cat_font = get_font(26, bold=True)
+        cw = cat_font.getlength(category) + 28
         cx = card_x + (card_w - cw) // 2
-        cy = card_y + 360
-        draw.rounded_rectangle([cx, cy, cx + cw, cy + 34], radius=6, fill=60)
-        draw.text((cx + cw // 2, cy + 17), category, fill=230, font=cat_font, anchor="mm")
+        cy = card_y + int(card_h * 0.77)
+        draw.rounded_rectangle([cx, cy, cx + cw, cy + 44], radius=8, fill=60)
+        draw.text((cx + cw // 2, cy + 22), category, fill=230, font=cat_font, anchor="mm")
 
-    # --- Element name header (right side) ---
-    header_font = _fit_font_to_width(name.upper(), WIDTH - 420 - PAD, 56, min_size=30, bold=True)
-    draw.text((420, 90), _truncate_text(header_font, name.upper(), WIDTH - 420 - PAD),
-              fill=20, font=header_font, anchor="lt")
-    draw.line([(420, 155), (WIDTH - PAD, 155)], fill=120, width=2)
-
-    # --- Properties grid (right side, two columns) ---
+    # --- Properties list (right column) ---
+    right_x = card_x + card_w + gap
+    right_w = card_w
     props_left = [
         ("State", state),
         ("Electronegativity", str(electronegativity) if electronegativity else ""),
@@ -102,36 +108,23 @@ def render_element_of_day() -> Image.Image:
         ("Group", str(category) if category else ""),
     ]
 
-    label_font = get_font(22, bold=True)
-    value_font = get_font(26)
-    row_h = 58
-    ly = 180
-    ry = 180
+    label_font = get_font(28, bold=True)
+    value_font = get_font(34)
+    row_h = 70
 
-    for label, value in props_left:
+    props = props_left + props_right
+    block_h = max(0, (len(props) - 1) * row_h + 42)
+    row_y = content_top + max(0, ((footer_y - content_top) - block_h) // 2)
+    for label, value in props:
         if not value:
             continue
-        # Label in rounded box
-        label_text = _truncate_text(label_font, label, 200)
-        lw = label_font.getlength(label_text) + 12
-        draw.rounded_rectangle([420, ly, 420 + lw, ly + 30], radius=4, outline=40, width=1)
-        draw.text((426, ly + 15), label_text, fill=40, font=label_font, anchor="lm")
-        # Value next to it
-        value_max = WIDTH - (430 + lw) - PAD
-        draw.text((430 + lw, ly + 15), _truncate_text(value_font, value, value_max), fill=20, font=value_font, anchor="lm")
-        ly += row_h
-
-    for label, value in props_right:
-        if not value:
-            continue
-        label_text = _truncate_text(label_font, label, 200)
-        lw = label_font.getlength(label_text) + 12
-        rx = 720
-        draw.rounded_rectangle([rx, ry, rx + lw, ry + 30], radius=4, outline=40, width=1)
-        draw.text((rx + 6, ry + 15), label_text, fill=40, font=label_font, anchor="lm")
-        value_max = WIDTH - (rx + lw + 10) - PAD
-        draw.text((rx + lw + 10, ry + 15), _truncate_text(value_font, value, value_max),
+        label_text = _truncate_text(label_font, label, 240)
+        lw = label_font.getlength(label_text) + 18
+        draw.rounded_rectangle([right_x, row_y, right_x + lw, row_y + 42], radius=7, outline=40, width=1)
+        draw.text((right_x + 8, row_y + 21), label_text, fill=40, font=label_font, anchor="lm")
+        value_max = WIDTH - (right_x + lw + 18) - PAD
+        draw.text((right_x + lw + 14, row_y + 21), _truncate_text(value_font, value, value_max),
                   fill=20, font=value_font, anchor="lm")
-        ry += row_h
+        row_y += row_h
 
     return img

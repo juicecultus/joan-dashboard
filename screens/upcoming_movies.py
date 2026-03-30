@@ -42,84 +42,88 @@ def render_upcoming_movies() -> Image.Image:
     poster_loaded = False
     first = movies[0]
     poster_path = first.get("poster_path", "")
+
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    content_top = 170
+    gap = 36
+    col_w = int((WIDTH - PAD * 2 - gap) / 2)
+    col_h = footer_y - content_top
+    left_x = PAD + 20
+    right_x = left_x + col_w + gap
+
     if poster_path:
         try:
             poster_url = f"https://image.tmdb.org/t/p/w342{poster_path}"
             r = requests.get(poster_url, timeout=10)
             if r.status_code == 200:
                 poster = Image.open(BytesIO(r.content)).convert("L")
-                # Scale poster to fit left side
+                # Scale poster to fill the entire left column while preserving aspect ratio
                 pw, ph = poster.size
-                target_h = 500
-                scale = target_h / ph
-                poster = poster.resize((int(pw * scale), target_h), Image.LANCZOS)
+                scale = min(col_w / pw, col_h / ph)
+                new_w, new_h = int(pw * scale), int(ph * scale)
+                poster = poster.resize((new_w, new_h), Image.LANCZOS)
                 from PIL import ImageOps
                 poster = ImageOps.autocontrast(poster, cutoff=2)
-                img.paste(poster, (PAD + 20, 180))
+                poster_x = left_x + (col_w - new_w) // 2
+                poster_y = content_top + (col_h - new_h) // 2
+                img.paste(poster, (poster_x, poster_y))
+                draw.rectangle([left_x, content_top, left_x + col_w, content_top + col_h], outline=180, width=2)
                 poster_loaded = True
-                poster_w = int(pw * scale)
         except Exception as e:
             print(f"[movies] Poster failed: {e}")
 
-    # First movie details
-    text_x = PAD + poster_w + 40 if poster_loaded else PAD + 40
-    text_max = WIDTH - text_x - PAD
+    if not poster_loaded:
+        draw.rectangle([left_x, content_top, left_x + col_w, content_top + col_h], fill=235, outline=180, width=2)
+        draw.text((left_x + col_w // 2, content_top + col_h // 2), "Poster unavailable",
+                  fill=110, font=get_font(32, bold=True), anchor="mm")
 
     title = first.get("title", "Untitled")
     release = first.get("release_date", "")
     overview = first.get("overview", "")
     vote = first.get("vote_average", 0)
 
-    y = 190
-    # Title
-    title_font = get_font(38, bold=True)
-    title_lines = _wrap_text(title_font, title, text_max)
-    for ln in title_lines[:2]:
-        draw.text((text_x, y), ln, fill=0, font=title_font, anchor="lt")
-        y += 50
+    # Right column split into movie context (top) and list (bottom)
+    right_top_h = int(col_h * 0.56)
+    right_bottom_h = col_h - right_top_h
+    right_top_y = content_top
+    right_bottom_y = content_top + right_top_h
 
-    y += 10
+    # Movie context in the top-right block
+    title_font = get_font(38, bold=True)
+    title_lines = _wrap_text(title_font, title, col_w)
+    y = right_top_y + 10
+    for ln in title_lines[:2]:
+        draw.text((right_x, y), ln, fill=0, font=title_font, anchor="lt")
+        y += 48
+
     if release:
         try:
             rd = datetime.strptime(release, "%Y-%m-%d")
-            draw.text((text_x if poster_loaded else PAD + 40, y), rd.strftime("%d %B %Y"), fill=80, font=get_font(28), anchor="lt")
-            y += 40
+            draw.text((right_x, y), rd.strftime("%d %B %Y"), fill=80, font=get_font(28), anchor="lt")
+            y += 38
         except ValueError:
             pass
 
     if vote:
-        draw.text((text_x if poster_loaded else PAD + 40, y), f"★ {vote:.1f}/10", fill=60, font=get_font(28, bold=True), anchor="lt")
-        y += 40
+        star_size = 12
+        _draw_star(draw, right_x + star_size, y + 18, star_size, fill=60)
+        draw.text((right_x + star_size * 2 + 8, y), f"{vote:.1f}/10", fill=60, font=get_font(28, bold=True), anchor="lt")
+        y += 38
 
-    # Overview (short)
     if overview:
-        y += 10
-        ox = text_x if poster_loaded else PAD + 40
-        o_max = text_max if poster_loaded else WIDTH - PAD * 2 - 40
+        y += 8
         font = get_font(24)
-        words = overview.split()
-        lines, line = [], ""
-        for w in words:
-            test = f"{line} {w}".strip()
-            if font.getlength(test) > o_max:
-                if line:
-                    lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            lines.append(line)
-        max_lines = 6 if poster_loaded else 4
-        for ln in lines[:max_lines]:
-            draw.text((ox, y), ln, fill=100, font=font, anchor="lt")
+        lines = _wrap_text(font, overview, col_w)
+        for ln in lines[:max(3, (right_top_h - (y - right_top_y)) // 30)]:
+            draw.text((right_x, y), ln, fill=100, font=font, anchor="lt")
             y += 30
 
-    # Other upcoming movies list
-    list_y = max(700, y + 20)
-    draw.line([(PAD, list_y - 10), (WIDTH - PAD, list_y - 10)], fill=200, width=1)
-    draw.text((PAD + 20, list_y + 5), "Also coming soon:", fill=140, font=get_font(24), anchor="lt")
-    list_y += 45
+    # Other upcoming movies list in the bottom-right block
+    draw.line([(right_x, right_bottom_y + 10), (right_x + col_w, right_bottom_y + 10)], fill=200, width=1)
+    draw.text((right_x, right_bottom_y + 22), "Also coming soon:", fill=140, font=get_font(24), anchor="lt")
 
+    list_y = right_bottom_y + 58
     for m in movies[1:5]:
         t = m.get("title", "")
         rd = m.get("release_date", "")
@@ -130,11 +134,12 @@ def render_upcoming_movies() -> Image.Image:
             except ValueError:
                 pass
         list_font = get_font(26)
-        draw.text((PAD + 40, list_y), f"• {_truncate_text(list_font, t, WIDTH - PAD * 2 - 140)}",
+        _draw_bullet(draw, right_x + 15, list_y + 14, 8, fill=40)
+        draw.text((right_x + 35, list_y), _truncate_text(list_font, t, col_w - 145),
                   fill=40, font=list_font, anchor="lt")
         if date_str:
-            draw.text((WIDTH - PAD - 20, list_y), date_str, fill=140, font=get_font(22), anchor="rt")
-        list_y += 45
+            draw.text((right_x + col_w - 10, list_y), date_str, fill=140, font=get_font(22), anchor="rt")
+        list_y += 42
 
     _footer(draw, now_str())
     return img

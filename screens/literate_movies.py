@@ -91,7 +91,6 @@ def _fetch_movie_details(slug):
 
 def render_literate_movies() -> Image.Image:
     """Show a movie from the Literate Movies Letterboxd list, rotating daily."""
-    from PIL import ImageOps
     img = Image.new("L", (WIDTH, HEIGHT), 230)
     draw = ImageDraw.Draw(img)
 
@@ -119,66 +118,88 @@ def render_literate_movies() -> Image.Image:
     cast = movie.get("cast", [])
     poster_url = movie.get("poster_url", "")
 
-    # Layout: poster on left, info on right
-    poster_w = 450
-    poster_area_h = HEIGHT - 120  # leave room for footer
-    info_x = poster_w + PAD + 40
+    # Header
+    title_str = f"{title} ({year})" if year else title
+    title_font = _fit_font_to_width(title_str.upper(), WIDTH - PAD * 2, 72, min_size=44, bold=True)
+    draw.text((WIDTH // 2, 72), _truncate_text(title_font, title_str.upper(), WIDTH - PAD * 2),
+              fill=0, font=title_font, anchor="mt")
+    draw.line([(PAD, 166), (WIDTH - PAD, 166)], fill=120, width=3)
+
+    # Layout: two equal-width columns below the divider
+    footer_h = 60
+    footer_y = HEIGHT - footer_h
+    content_top = 194
+    gap = 48
+    card_w = int((WIDTH - PAD * 2 - gap) / 2)
+    card_h = int((footer_y - content_top) * 0.7)
+    card_x = 60
+    card_y = content_top + max(0, ((footer_y - content_top) - card_h) // 2)
+    right_x = card_x + card_w + gap
+    right_w = card_w
+    right_y = content_top
 
     # Fetch and render poster
+    poster_drawn = False
     if poster_url:
         try:
             rp = requests.get(poster_url, timeout=15,
                               headers={"User-Agent": "JoanDashboard/1.0"})
             rp.raise_for_status()
             poster = Image.open(BytesIO(rp.content)).convert("L")
-            # Scale to fit poster area
+            # Scale to fill the poster card while preserving aspect ratio
             pw, ph = poster.size
-            scale = min(poster_w / pw, poster_area_h / ph)
+            scale = min(card_w / pw, card_h / ph)
             new_w, new_h = int(pw * scale), int(ph * scale)
             poster = poster.resize((new_w, new_h), Image.LANCZOS)
-            img.paste(poster, (PAD, (poster_area_h - new_h) // 2 + 20))
+            card_img = Image.new("L", (card_w, card_h), 255)
+            card_img.paste(poster, ((card_w - new_w) // 2, (card_h - new_h) // 2))
+            img.paste(card_img, (card_x, card_y))
+            draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h], outline=20, width=3)
+            poster_drawn = True
         except Exception:
-            draw.rectangle([PAD, 20, PAD + poster_w, poster_area_h],
-                          fill=200, outline=180)
+            poster_drawn = False
 
-    # Title + year
-    title_str = f"{title} ({year})" if year else title
-    title_font = get_font(38, bold=True)
-    title_lines = _wrap_text(title_font, title_str, WIDTH - info_x - PAD)
-    ty = 40
-    for ln in title_lines[:3]:
-        draw.text((info_x, ty), ln, fill=0, font=title_font, anchor="lt")
-        ty += 50
+    if not poster_drawn:
+        draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h], fill=200, outline=180, width=3)
+        draw.text((card_x + card_w // 2, card_y + card_h // 2), "Poster unavailable",
+                  fill=100, font=get_font(32, bold=True), anchor="mm")
 
-    ty += 15
-    # Director
-    if director:
-        draw.text((info_x, ty), f"Directed by {director}",
-                  fill=60, font=get_font(28), anchor="lt")
-        ty += 40
+    # Right column: movie context centered vertically
+    context_lines = []
+    if year:
+        context_lines.append((f"Directed by {director}" if director else "", get_font(28), 60))
+    elif director:
+        context_lines.append((f"Directed by {director}", get_font(28), 60))
 
-    # Cast
     if cast:
-        ty += 10
         cast_str = ", ".join(cast)
-        cast_font = get_font(26)
-        cast_lines = _wrap_text(cast_font, f"Starring {cast_str}", WIDTH - info_x - PAD)
-        for ln in cast_lines[:3]:
-            draw.text((info_x, ty), ln, fill=80, font=cast_font, anchor="lt")
-            ty += 34
+        context_lines.append((f"Starring {cast_str}", get_font(26), 70))
 
-    # Description
     if desc:
-        ty += 20
-        desc_font = get_font(26)
-        desc_lines = _wrap_text(desc_font, desc, WIDTH - info_x - PAD)
-        for ln in desc_lines[:6]:
-            draw.text((info_x, ty), ln, fill=50, font=desc_font, anchor="lt")
-            ty += 34
+        context_lines.append((desc, get_font(26), 34))
+
+    rendered_blocks = []
+    for txt, font, line_h in context_lines:
+        if not txt:
+            continue
+        wrapped = _wrap_text(font, txt, right_w)
+        rendered_blocks.append((wrapped, font, line_h))
+
+    total_h = 0
+    for wrapped, font, line_h in rendered_blocks:
+        total_h += len(wrapped) * line_h + 14
+    if rendered_blocks:
+        total_h -= 14
+
+    ty = right_y + max(0, ((footer_y - right_y) - total_h) // 2)
+    for idx, (wrapped, font, line_h) in enumerate(rendered_blocks):
+        for ln in wrapped[:6]:
+            draw.text((right_x, ty), ln, fill=50 if font.size <= 26 else 30, font=font, anchor="lt")
+            ty += line_h
+        if idx < len(rendered_blocks) - 1:
+            ty += 14
 
     # Footer bar
-    footer_h = 60
-    footer_y = HEIGHT - footer_h
     draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=190)
     draw.text((PAD + 10, footer_y + footer_h // 2), "Literate Movies",
               fill=40, font=get_font(28, bold=True), anchor="lm")
