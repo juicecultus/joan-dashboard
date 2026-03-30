@@ -181,6 +181,30 @@ def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 12
     return y
 
 
+def _draw_wrapped_block(draw, x, y, width, height, text, size, bold=False, fill=0, rtl=False, max_lines=None):
+    """Draw wrapped text inside a rectangular block."""
+    rtl = rtl or _is_rtl_text(text)
+    font = _get_hebrew_font(size) if rtl else get_font(size, bold=bold)
+    lines = []
+    for paragraph in text.split("\n"):
+        lines.extend(_wrap_text(font, paragraph, width, rtl=rtl) or [""])
+    if max_lines is not None:
+        lines = lines[:max_lines]
+
+    line_h = max(int(_text_height(font, "Ag") * 1.22), size + 4)
+    block_h = line_h * len(lines)
+    top = y + max(0, (height - block_h) // 2)
+
+    for line in lines:
+        if rtl:
+            draw.text((x + width - 8, top), line, fill=fill, font=font, anchor="rt")
+        else:
+            draw.text((x + width // 2, top), line, fill=fill, font=font, anchor="mt")
+        top += line_h
+
+    return top
+
+
 def _fit_font_to_width(text: str, max_width: int, start_size: int, min_size: int = 12,
                        bold: bool = False) -> ImageFont.FreeTypeFont:
     """Return the largest font that fits the supplied width."""
@@ -2793,46 +2817,57 @@ def render_torah_wisdom() -> Image.Image:
     he_text = verse.get("he", "")
     ref_str = verse.get("ref", "")
 
-    # Truncate very long texts to keep layout clean
-    if len(en_text) > 250:
-        en_text = en_text[:247].rstrip() + "..."
+    content_top = 24
+    content_bottom = footer_y - 18
+    content_height = content_bottom - content_top
+    split_y = content_top + content_height // 2
 
-    # English text (left half, vertically centered)
-    en_area_w = WIDTH // 2 - 100
-    en_font = get_font(36)
-    en_lines = []
-    for paragraph in en_text.split("\n"):
-        en_lines.extend(_wrap_text(en_font, paragraph, en_area_w) or [""])
-    en_lines = en_lines[:8]
-    en_line_h = max(int(_text_height(en_font, "Ag") * 1.25), 46)
-    total_en_h = len(en_lines) * en_line_h
-    en_y = (footer_y - total_en_h) // 2
-    for ln in en_lines:
-        draw.text((PAD + en_area_w // 2, en_y), ln, fill=30,
-                  font=en_font, anchor="mt")
-        en_y += en_line_h
+    # Divider and language labels
+    draw.line([(PAD, split_y), (WIDTH - PAD, split_y)], fill=150, width=2)
+    draw.text((WIDTH // 2, content_top), "English", fill=80, font=get_font(24, bold=True), anchor="mt")
+    draw.text((WIDTH // 2, split_y + 10), "Hebrew", fill=80, font=get_font(24, bold=True), anchor="mt")
 
-    # Reference below English block
+    # English text in the top half
+    en_block_top = content_top + 34
+    en_block_height = max(20, split_y - en_block_top - 24)
+    en_text = re.sub(r"\s+", " ", en_text).strip()
+    if len(en_text) > 320:
+        en_text = en_text[:317].rstrip() + "..."
+    _draw_wrapped_block(
+        draw,
+        PAD,
+        en_block_top,
+        WIDTH - PAD * 2,
+        en_block_height,
+        en_text,
+        34,
+        bold=True,
+        fill=30,
+        rtl=False,
+        max_lines=6,
+    )
     if ref_str:
-        draw.text((PAD + en_area_w // 2, en_y + 15), f"— {ref_str}", fill=80,
-                  font=get_font(28), anchor="mt")
+        draw.text((WIDTH // 2, split_y - 12), f"— {ref_str}", fill=85, font=get_font(24), anchor="mt")
 
-    # Hebrew text (right half, vertically centered, needs Hebrew font)
+    # Hebrew text in the bottom half
     if he_text:
-        if len(he_text) > 200:
-            he_text = he_text[:197].rstrip() + "..."
-        he_font = _get_hebrew_font(34)
-        he_area_w = WIDTH // 2 - 100
-        he_lines = []
-        for paragraph in he_text.split("\n"):
-            he_lines.extend(_wrap_text(he_font, paragraph, he_area_w, rtl=True) or [""])
-        he_lines = he_lines[:8]
-        he_line_h = max(int(_text_height(he_font, "אבג") * 1.25), 48)
-        total_he_h = len(he_lines) * he_line_h
-        he_y = (footer_y - total_he_h) // 2
-        for ln in he_lines:
-            draw.text((WIDTH - PAD, he_y), ln, fill=60, font=he_font, anchor="rt")
-            he_y += he_line_h
+        he_block_top = split_y + 34
+        he_block_height = max(20, content_bottom - he_block_top - 8)
+        if len(he_text) > 260:
+            he_text = he_text[:257].rstrip() + "..."
+        _draw_wrapped_block(
+            draw,
+            PAD,
+            he_block_top,
+            WIDTH - PAD * 2,
+            he_block_height,
+            he_text,
+            36,
+            bold=False,
+            fill=55,
+            rtl=True,
+            max_lines=6,
+        )
 
     return img
 

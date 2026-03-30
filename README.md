@@ -44,7 +44,7 @@ A custom dashboard and **playlist rotation system** for **Joan e-ink displays** 
 - **Bank Holidays** — upcoming England & Wales bank holidays with countdown badges; data from [gov.uk](https://www.gov.uk/bank-holidays.json) (free, no key)
 - **Flip Clock** — retro flip clock with 4 digit panels showing HH:MM in 12-hour format with AM/PM; pure calculation, no API
 - **Weather Glance** — current temperature + 7-day bar chart forecast with high/low temps and weather labels; reuses [Open-Meteo](https://open-meteo.com/) weather data (free, no key)
-- **Torah Wisdom** — daily verse from Proverbs, Psalms, Ecclesiastes or Pirkei Avot with English + Hebrew text; powered by [Sefaria](https://developers.sefaria.org/) API (free, no key)
+- **Torah Wisdom** — daily verse from Proverbs, Psalms, Ecclesiastes or Pirkei Avot with English stacked above Hebrew in a vertical split layout; powered by [Sefaria](https://developers.sefaria.org/) API (free, no key)
 - **BBC News** — top BBC stories with thumbnail images + headline list; powered by [BBC News API](https://bbc-news-api.vercel.app/) (free, no key)
 - **Element of the Day** — daily periodic table element with symbol card, atomic number, mass, category badge, and full properties grid (state, config, melting/boiling points, density, discovery year); data from [hossain-khan/trmnl-elements-plugin](https://github.com/hossain-khan/trmnl-elements-plugin) (static JSON, no key)
 - **Daily Cartoon** — today's cartoon from [The New Yorker](https://www.newyorker.com/cartoons/daily-cartoon) with caption, auto-cropped whitespace for optimal e-ink display (scraped, no key)
