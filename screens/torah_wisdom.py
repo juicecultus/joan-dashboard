@@ -119,11 +119,11 @@ def render_torah_wisdom() -> Image.Image:
         draw.text((WIDTH // 2, y), ln, fill=30, font=en_font, anchor="mt")
         y += int(52 * 1.3)
 
-    # Draw Hebrew
+    # Draw Hebrew (raqm shapes niqqud/cantillation when available)
     if he_lines:
         y += gap
         for ln in he_lines:
-            draw.text((WIDTH // 2, y), ln, fill=60, font=he_font, anchor="mt")
+            _draw_text_intl(draw, (WIDTH // 2, y), ln, font=he_font, fill=60, anchor="mt", rtl=True)
             y += int(56 * 1.3)
 
     _footer(draw, now_str())

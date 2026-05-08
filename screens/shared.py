@@ -24,6 +24,17 @@ try:
 except Exception:
     _bidi_get_display = None
 
+# Pillow with libraqm support handles bidi + complex shaping (mark/mkmk) natively.
+# When available, we skip manual visual-order reordering and pass direction="rtl"
+# to draw.text() so HarfBuzz positions niqqud/cantillation marks correctly.
+try:
+    from PIL import features as _PIL_features
+    _HAS_RAQM = bool(_PIL_features.check("raqm"))
+except Exception:
+    _HAS_RAQM = False
+
+_RTL_FEATURES = ["rlig", "liga", "mark", "mkmk", "ccmp"]
+
 # Reuse from main dashboard
 from joan_dashboard import (
     WIDTH, HEIGHT, get_font, fetch_weather, fetch_week_events,
@@ -75,10 +86,15 @@ def _get_cjk_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _get_hebrew_font(size: int) -> ImageFont.FreeTypeFont:
-    """Get a font that supports Hebrew characters."""
+    """Get a font that supports Hebrew characters with full niqqud + cantillation coverage."""
     key = ("he", size)
     if key not in _INTL_FONT_CACHE:
+        # Bundled Noto Hebrew has full Biblical Hebrew block coverage
+        # (base letters, niqqud U+05B0–U+05BC, cantillation U+0591–U+05AF, maqaf, etc).
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidates = [
+            os.path.join(repo_root, "fonts", "NotoSerifHebrew-Regular.ttf"),
+            os.path.join(repo_root, "fonts", "NotoSansHebrew-Regular.ttf"),
             "/Library/Fonts/Arial Unicode.ttf",
             "/System/Library/Fonts/Supplemental/Arial Hebrew.ttf",
             "/System/Library/Fonts/Supplemental/Raanana.ttc",
@@ -139,8 +155,16 @@ def _text_height(font, text: str) -> int:
 
 
 def _shape_rtl_text(text: str) -> str:
-    """Best-effort RTL shaping for Hebrew text."""
+    """Best-effort RTL shaping for Hebrew text.
+
+    With libraqm-enabled Pillow we leave the string in logical order and let
+    HarfBuzz handle bidi + mark positioning at draw time. Without raqm, fall
+    back to python-bidi (or naïve word reversal) so widths/output are at least
+    legible.
+    """
     if not text:
+        return text
+    if _HAS_RAQM:
         return text
     if _bidi_get_display is not None:
         try:
@@ -159,6 +183,26 @@ def _shape_rtl_text(text: str) -> str:
     return "\n".join(shaped_lines)
 
 
+def _draw_text_intl(draw, xy, text, *, font, fill=0, anchor=None, rtl=False):
+    """Draw text with proper bidi/shaping when the text is RTL and raqm is available."""
+    if rtl and _HAS_RAQM:
+        draw.text(xy, text, fill=fill, font=font, anchor=anchor,
+                  direction="rtl", features=_RTL_FEATURES)
+    else:
+        draw.text(xy, text, fill=fill, font=font, anchor=anchor)
+
+
+def _measure_text_intl(font, text: str, rtl: bool = False) -> int:
+    """Measure shaped text width when raqm is available, else use bbox."""
+    if rtl and _HAS_RAQM:
+        try:
+            length = font.getlength(text, direction="rtl", features=_RTL_FEATURES)
+            return int(length)
+        except Exception:
+            pass
+    return _text_width(font, text)
+
+
 def _is_rtl_text(text: str) -> bool:
     """Return True when a string contains Hebrew/RTL characters."""
     return any("\u0590" <= ch <= "\u08FF" for ch in text)
@@ -171,8 +215,11 @@ def _wrap_text(font, text, max_width, rtl=False):
     line = ""
     for word in words:
         test = f"{line} {word}".strip()
-        measured = _shape_rtl_text(test) if rtl else test
-        if _text_width(font, measured) > max_width:
+        if rtl:
+            width = _measure_text_intl(font, test, rtl=True)
+        else:
+            width = _text_width(font, test)
+        if width > max_width:
             if line:
                 lines.append(_shape_rtl_text(line) if rtl else line)
             line = word
@@ -192,7 +239,7 @@ def _centered_text(draw, y, text, size, bold=False, fill=0, max_width=WIDTH - 12
         lines.extend(_wrap_text(font, paragraph, max_width, rtl=rtl) or [""])
     line_h = max(int(_text_height(font, "Ag") * 1.25), size + 6)
     for line in lines:
-        draw.text((WIDTH // 2, y), line, fill=fill, font=font, anchor="mt")
+        _draw_text_intl(draw, (WIDTH // 2, y), line, font=font, fill=fill, anchor="mt", rtl=rtl)
         y += line_h
     return y
 
@@ -213,7 +260,7 @@ def _draw_wrapped_block(draw, x, y, width, height, text, size, bold=False, fill=
 
     for line in lines:
         if rtl:
-            draw.text((x + width - 8, top), line, fill=fill, font=font, anchor="rt")
+            _draw_text_intl(draw, (x + width - 8, top), line, font=font, fill=fill, anchor="rt", rtl=True)
         else:
             draw.text((x + width // 2, top), line, fill=fill, font=font, anchor="mt")
         top += line_h

@@ -4,15 +4,13 @@ from .shared import *
 
 STOCK_TICKERS = os.environ.get(
     "STOCK_TICKERS",
-    "^FTSE,^GSPC,AAPL,MSFT,GOOGL,AMZN,TSL,NVDA,META,ARM",
+    "^FTSE,^GSPC,AAPL,MSFT,GOOGL,AMZN,TSLA,NVDA,META,ARM",
 ).split(",")
 
 
 def _quote_symbol(ticker):
     """Resolve aliases to a live Yahoo Finance symbol when needed."""
-    aliases = {
-        "TSL": "TSLA",  # user requested TSL, but Tesla's live symbol is TSLA
-    }
+    aliases = {}
     return aliases.get(ticker, ticker)
 
 
@@ -48,7 +46,7 @@ def _ticker_name(ticker):
         "^FTSE": "FTSE 100", "^GSPC": "S&P 500", "^DJI": "Dow Jones",
         "^IXIC": "NASDAQ", "^N225": "Nikkei 225",
         "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet",
-        "AMZN": "Amazon", "TSLA": "Tesla", "TSL": "Tesla",
+        "AMZN": "Amazon", "TSLA": "Tesla",
         "META": "Meta", "ARM": "Arm",
         "NVDA": "NVIDIA", "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum",
     }
