@@ -1,0 +1,32 @@
+{
+  "enabled": [
+    "dashboard",
+    "quote",
+    "countdown",
+    "photo",
+    "word",
+    "history",
+    "art",
+    "joke",
+    "progress",
+    "rss",
+    "stocks",
+    "moon",
+    "airquality",
+    "clock",
+    "movies",
+    "trains",
+    "bins",
+    "flipdate",
+    "proverb",
+    "holidays",
+    "flipclock",
+    "torah",
+    "bbc",
+    "element",
+    "cartoon",
+    "litmovies",
+    "buddha"
+  ],
+  "interval": 180
+}

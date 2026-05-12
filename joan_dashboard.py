@@ -1113,12 +1113,7 @@ def main():
             # Active hours check
             now_mins = datetime.now().hour * 60 + datetime.now().minute
             if now_mins < active_start or now_mins >= active_end:
-                now_m = datetime.now().hour * 60 + datetime.now().minute
-                if now_m >= active_end:
-                    sleep_mins = (24 * 60 - now_m) + active_start
-                else:
-                    sleep_mins = active_start - now_m
-                # Push sleep screen before sleeping
+                # Push sleep screen once
                 try:
                     from joan_screens import render_sleep_screen
                     wake_str = f"{active_start // 60:02d}:{active_start % 60:02d}"
@@ -1126,9 +1121,19 @@ def main():
                     render_and_push_all(lambda: render_sleep_screen(wake_time=wake_str))
                 except Exception as e:
                     print(f"[sleep] Failed to render sleep screen: {e}")
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}), sleeping {sleep_mins}min")
-                time.sleep(sleep_mins * 60)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Outside active hours ({args.active_hours}); polling until wake")
+                # Poll the wall clock in short increments. A single long time.sleep()
+                # is unsafe on macOS because nanosleep doesn't tick while the host is
+                # asleep, so an overnight 10h sleep can leave the loop stranded after
+                # the Mac wakes. Re-checking every 60s also self-heals against clock
+                # changes (DST, manual sync).
+                while True:
+                    now_m = datetime.now().hour * 60 + datetime.now().minute
+                    if active_start <= now_m < active_end:
+                        break
+                    time.sleep(60)
                 screen_idx = 0  # restart from first screen on wake
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Inside active hours, resuming playlist")
                 continue
 
             name, render_fn = screens[screen_idx]
