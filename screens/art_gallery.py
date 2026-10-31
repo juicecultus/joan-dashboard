@@ -23,4 +23,4 @@ def _fetch_art():
 
 def render_art_gallery():
     art = _require(_cache_fetch("art_v2", 86400, 604800, _fetch_art))
-    return _picture(art['image'], art['title'] + "\n" + art['artist'])
+    return _picture(art['image'], art['title'], credit='by '+art['artist'] if art['artist'] else '', editorial=True)

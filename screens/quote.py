@@ -23,4 +23,4 @@ def render_quote() -> Image.Image:
         quote_text = result.get("q") or quote_text
         author = result.get("a") or author
 
-    return _statement(quote_text, author)
+    return _statement(quote_text, author, editorial=True)

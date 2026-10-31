@@ -29,5 +29,9 @@ def render_upcoming_movies() -> Image.Image:
     title = movie.get('title', 'Untitled')
     date = movie.get('release_date', '')
     caption = title
+    try:
+        date = datetime.fromisoformat(date).strftime('%-d %b %Y') if date else ''
+    except ValueError:
+        pass
     poster = _image_url("https://image.tmdb.org/t/p/w780" + movie['poster_path']) if movie.get('poster_path') else None
-    return _picture(poster, caption, portrait=True) if poster else _statement(title, date)
+    return _picture(poster, caption, portrait=True, credit=date) if poster else _statement(title, date)

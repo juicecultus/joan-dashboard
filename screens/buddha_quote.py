@@ -12,4 +12,4 @@ _VERSES = [
 
 def render_buddha_quote():
     text, source = _VERSES[datetime.now().toordinal() % len(_VERSES)]
-    return _statement(text, source, size=125)
+    return _statement(text, source, size=125, editorial=True)

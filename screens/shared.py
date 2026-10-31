@@ -420,11 +420,30 @@ def _calendar_page(day, month, title, detail=''):
     return img
 
 
-def _statement(text, detail="", size=140):
+def _editorial_font(size):
+    """A book-like serif for artwork titles and quotations; never for clocks."""
+    key = ('editorial',size)
+    if key not in _INTL_FONT_CACHE:
+        for path in ('/System/Library/Fonts/Supplemental/Georgia.ttf',
+                     '/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf'):
+            try:
+                _INTL_FONT_CACHE[key] = ImageFont.truetype(path,size)
+                break
+            except OSError:
+                continue
+        else:
+            _INTL_FONT_CACHE[key] = get_font(size)
+    return _INTL_FONT_CACHE[key]
+
+
+def _statement(text, detail="", size=140, editorial=False):
     img, draw = _canvas()
-    _poster_text(draw, text, (50, 50, WIDTH-100, 1280 if detail else HEIGHT-100), max(size, 500))
+    draw.rounded_rectangle((28,28,WIDTH-28,HEIGHT-28),radius=38,outline=0,width=5)
+    _poster_text(draw, text, (75,80,WIDTH-150,1210 if detail else HEIGHT-160),
+                 max(size,500),font_fn=_editorial_font if editorial else None)
     if detail:
-        _poster_text(draw, detail, (60, 1390, WIDTH-120, 150), 110, False)
+        draw.line((WIDTH//2-90,1350,WIDTH//2+90,1350),fill=0,width=4)
+        _poster_text(draw, detail, (85,1400,WIDTH-170,125), 84, False)
     return img
 
 
@@ -444,23 +463,31 @@ def _image_url(url):
     return _cache_fetch("image:" + url, 3600, 86400, fetch)
 
 
-def _picture(image, caption="", portrait=False, photo=True):
+def _picture(image, caption="", portrait=False, photo=True, credit="", editorial=False):
     from PIL import ImageOps
     _require(image)
     img, draw = _canvas()
-    fitted = ImageOps.contain(image.convert("L"), (WIDTH-40, HEIGHT-(180 if portrait and caption else 390 if caption else 40)), Image.Resampling.LANCZOS)
+    reserved = (430 if credit else 200) if portrait else 440
+    fitted = ImageOps.contain(image.convert("L"),
+        (WIDTH-40, HEIGHT-(reserved if caption else 40)), Image.Resampling.LANCZOS)
+    image_left = (WIDTH-fitted.width)//2
+    image_top = 20 if caption else (HEIGHT-fitted.height)//2
+    img.paste(fitted,(image_left,image_top))
     if caption:
-        # Give a landscape picture's unused height to its headline instead of
-        # leaving a large fixed gap between the image and a small caption.
-        img.paste(fitted, ((WIDTH-fitted.width)//2,20))
-        top = fitted.height+50
-        _poster_text(draw, caption, (40,top,WIDTH-80,HEIGHT-top-30), 260)
-    else:
-        img.paste(fitted, ((WIDTH-fitted.width)//2,(HEIGHT-fitted.height)//2))
+        top = fitted.height+45
+        bottom = HEIGHT-25
+        draw.rounded_rectangle((25,top,WIDTH-25,bottom),radius=28,outline=0,width=4)
+        title_top = top+35
+        title_bottom = bottom-(165 if credit else 30)
+        _poster_text(draw,caption,(65,title_top,WIDTH-130,title_bottom-title_top),
+                     205 if editorial else 250,font_fn=_editorial_font if editorial else None)
+        if credit:
+            # A quiet credit with its own measure, weight and separating rule.
+            rule_y = bottom-135
+            draw.line((WIDTH//2-80,rule_y,WIDTH//2+80,rule_y),fill=0,width=3)
+            _poster_text(draw,credit,(75,rule_y+30,WIDTH-150,75),72,False)
     if photo:
-        left = (WIDTH-fitted.width)//2
-        top = 20 if caption else (HEIGHT-fitted.height)//2
-        img.info['photo_regions'] = [(left,top,left+fitted.width,top+fitted.height)]
+        img.info['photo_regions'] = [(image_left,image_top,image_left+fitted.width,image_top+fitted.height)]
     return img
 
 
