@@ -32,7 +32,6 @@ SCREEN_CATALOG = [
     ("radar",      "Weather Radar",         "Current weather radar map"),
     ("joke",       "Dad Joke",              "Random dad joke"),
     ("progress",   "Year Progress",         "Year progress bar + stats"),
-    ("maths",      "Maths Challenge",       "8 maths problems for kids"),
     ("rss",        "RSS Headlines",         "Latest articles from RSS feed"),
     ("stocks",     "Stock Ticker",          "Live stock prices + daily change"),
     ("todo",       "Todo List",             "Google Tasks full-screen list"),

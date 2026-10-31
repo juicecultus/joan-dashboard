@@ -29,7 +29,7 @@ _CAPITALS = [
 
 def render_kid_learning_card():
     slot = int(time.time() // 1800)
-    if slot % 3 == 0:
+    if slot % 2 == 0:
         words = [w for group in _SPELLING_WORDS.values() for w in group]
         img, draw = _canvas()
         # A large pencil makes the spelling activity instantly recognisable.
@@ -45,9 +45,6 @@ def render_kid_learning_card():
         _poster_text(draw,words[slot % len(words)],(40,880,1120,400),420)
         _poster_text(draw,'Spell it',(40,1430,1120,110),120,False)
         return img
-    if slot % 3 == 1:
-        a, b = 2 + slot % 11, 2 + (slot//11) % 11
-        return _statement(f"{a} × {b}\n= ?", size=650)
     country, capital = _CAPITALS[slot % len(_CAPITALS)]
     img, draw = _canvas()
     draw.ellipse((330,40,870,580),fill=0)

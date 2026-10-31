@@ -10,7 +10,6 @@ from .art_gallery import render_art_gallery
 from .weather_radar import render_weather_radar
 from .dad_joke import render_dad_joke
 from .year_progress import render_year_progress
-from .maths_challenge import render_maths_challenge
 from .rss_headlines import render_rss_headlines
 from .stock_ticker import render_stock_ticker
 from .todo_list import render_todo_list
@@ -47,7 +46,6 @@ ALL_SCREENS = {
     "radar": render_weather_radar,
     "joke": render_dad_joke,
     "progress": render_year_progress,
-    "maths": render_maths_challenge,
     "rss": render_rss_headlines,
     "stocks": render_stock_ticker,
     "todo": render_todo_list,
@@ -84,7 +82,6 @@ __all__ = [
     "render_weather_radar",
     "render_dad_joke",
     "render_year_progress",
-    "render_maths_challenge",
     "render_rss_headlines",
     "render_stock_ticker",
     "render_todo_list",
