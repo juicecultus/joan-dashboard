@@ -134,25 +134,53 @@ def _fetch_bins():
         return _parse_collection_table(markup)
 
 
-def _draw_bin_icon(draw, cx, cy, size, fill, label_char):
-    """Draw a simple bin icon (rounded rectangle with lid) at center (cx, cy)."""
-    w = size
-    h = int(size * 1.3)
-    # Body
-    draw.rounded_rectangle(
-        [cx - w // 2, cy - h // 2 + 8, cx + w // 2, cy + h // 2],
-        radius=8, fill=fill, outline=0, width=2,
-    )
-    # Lid (wider top bar)
-    lid_w = w + 12
-    draw.rounded_rectangle(
-        [cx - lid_w // 2, cy - h // 2 - 4, cx + lid_w // 2, cy - h // 2 + 12],
-        radius=4, fill=fill, outline=0, width=2,
-    )
-    # Handle
-    draw.rectangle([cx - 8, cy - h // 2 - 14, cx + 8, cy - h // 2 - 4], fill=fill)
-    # Label character inside bin
-    draw.text((cx, cy + 6), label_char, fill=255, font=get_font(int(size * 0.5), bold=True), anchor="mm")
+def _bin_pictogram(name, width, height):
+    """Oversampled geometry: a food caddy or a wheeled collection bin."""
+    import math
+    scale = 3
+    icon = Image.new('L', (1000*scale, 650*scale), 255)
+    d = ImageDraw.Draw(icon)
+    def polygon(points, fill=0):
+        d.polygon([(int(x*scale), int(y*scale)) for x,y in points], fill=fill)
+    def line(points, width=16):
+        d.line([(int(x*scale), int(y*scale)) for x,y in points], fill=0, width=width*scale, joint='curve')
+    def ellipse(box, fill=0):
+        d.ellipse(tuple(int(v*scale) for v in box), fill=fill)
+    food = 'food' in name.lower()
+    recycling = 'recycl' in name.lower()
+    label = 'Food' if food else 'Recycling' if recycling else 'Garden' if 'garden' in name.lower() else 'General waste' if 'general' in name.lower() else name
+    if food:
+        # Broad kitchen caddy with a raised carrying handle.
+        d.arc((270*scale, 15*scale, 730*scale, 420*scale), 180, 360, fill=0, width=20*scale)
+        polygon([(150,155),(850,155),(800,605),(200,605)])
+        polygon([(174,177),(826,177),(780,583),(220,583)],255)
+        line([(130,150),(870,150)],24)
+        ellipse((407,233,520,368)); ellipse((480,233,593,368))
+        polygon([(425,292),(575,292),(550,392),(450,392)])
+        line([(500,249),(510,208)],12)
+        ellipse((520,192,578,220))
+    else:
+        # Tapered outdoor bin, broad lid, pull handle and two wheels.
+        line([(680,100),(680,45),(810,45),(810,140)],18)
+        polygon([(170,125),(830,125),(770,570),(230,570)])
+        polygon([(194,148),(806,148),(750,548),(250,548)],255)
+        line([(140,124),(860,124)],26)
+        ellipse((230,555,315,640)); ellipse((685,555,770,640))
+        if recycling:
+            # Three separate chasing arrows; no font/emoji dependency.
+            for angle in (0,120,240):
+                pts=[(-85,-110),(52,-110),(52,-145),(135,-90),(52,-35),(52,-70),(-85,-70)]
+                r=math.radians(angle)
+                polygon([(500+.78*(x*math.cos(r)-y*math.sin(r)),290+.78*(x*math.sin(r)+y*math.cos(r))) for x,y in pts])
+        else:
+            line([(430,225),(570,225)],18)
+            line([(450,265),(450,380)],14); line([(500,265),(500,380)],14); line([(550,265),(550,380)],14)
+    size=112
+    while get_font(size*scale,bold=True).getlength(label)>460*scale:
+        size-=2
+    d.text((500*scale,485*scale),label,font=get_font(size*scale,bold=True),fill=0,anchor='mm')
+    from PIL import ImageOps
+    return ImageOps.contain(icon,(width,height),Image.Resampling.LANCZOS)
 
 
 def render_bins() -> Image.Image:
@@ -201,13 +229,12 @@ def render_bins() -> Image.Image:
     days = (next_date-today).days
     urgency = 'Today' if days == 0 else 'Tomorrow' if days == 1 else f'In {days} days'
     img, draw = _canvas()
-    _fit_block(draw, urgency, (80,80,WIDTH-160,250), 160, True)
-    # One collection day; all bins due on that day remain visible.
+    date_label = urgency if days < 2 else next_date.strftime('%A %-d %b')
+    _fit_block(draw, date_label, (60,20,WIDTH-120,160), 110, True)
+    # Stack the large pictograms in portrait; keep every bin due visible.
     count = len(types)
-    size = min(240, (WIDTH-160)//count-30)
+    row_height = (HEIGHT-210)//count
     for i, name in enumerate(types):
-        x = 80 + (i+.5)*(WIDTH-160)/count
-        _draw_bin_icon(draw, int(x), 680, size, 0, name[:1].upper())
-    _fit_block(draw, ' + '.join(types), (80,980,WIDTH-160,300), 105, True)
-    _fit_block(draw, next_date.strftime('%A %d %B'), (80,1390,WIDTH-160,130), 64)
+        icon = _bin_pictogram(name, WIDTH-60, row_height-12)
+        img.paste(icon, ((WIDTH-icon.width)//2, 190+i*row_height+(row_height-icon.height)//2))
     return img

@@ -85,6 +85,20 @@ class DisplayTests(unittest.TestCase):
         with self.assertRaises(shared.ScreenUnavailable):
             _parse_collection_table('<table></table>',date(2026,12,30))
 
+    def test_weather_scale_uses_observation_day_and_handles_flat_range(self):
+        from screens.weather_glance import _daily_range, _range_fraction
+        data = {'current': {'time': '2026-11-01T10:00'}, 'daily': {
+            'time': ['2026-10-31', '2026-11-01'],
+            'temperature_2m_min': [1, 5], 'temperature_2m_max': [8, 15]}}
+        self.assertEqual(_daily_range(data), (5, 15))
+        self.assertEqual(_range_fraction(10, 5, 15), .5)
+        self.assertEqual(_range_fraction(-2, 5, 15), 0)
+        self.assertEqual(_range_fraction(20, 5, 15), 1)
+        self.assertEqual(_range_fraction(5, 5, 5), .5)
+        data['daily']['temperature_2m_min'][1] = None
+        self.assertIsNone(_daily_range(data))
+        self.assertIsNone(_daily_range({}))
+
     def test_soap_locations_and_cancellation(self):
         self.assertEqual(_locations({'location':{'crs':'MYB'}}),[{'crs':'MYB'}])
         board={'trainServices':{'service':{'std':'18:10','destination':{'location':{'crs':'MYB','locationName':'London Marylebone'}},'isCancelled':'false','etd':'On time'}}}

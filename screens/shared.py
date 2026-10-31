@@ -396,9 +396,9 @@ def _fit_block(draw, text, box, size=120, bold=False, font_fn=None):
 
 def _statement(text, detail="", size=140):
     img, draw = _canvas()
-    _fit_block(draw, text, (80, 160, WIDTH-160, 980 if detail else 1280), size, True)
+    _fit_block(draw, text, (60, 60, WIDTH-120, 1160 if detail else HEIGHT-120), max(size, 240), True)
     if detail:
-        _fit_block(draw, detail, (90, 1210, WIDTH-180, 240), 64)
+        _fit_block(draw, detail, (70, 1260, WIDTH-140, 280), 90)
     return img
 
 
@@ -422,13 +422,15 @@ def _picture(image, caption="", portrait=False):
     from PIL import ImageOps
     _require(image)
     img, draw = _canvas()
-    area = (40, 40, WIDTH-80, HEIGHT-(390 if caption else 80))
-    text_area = (80, HEIGHT-320, WIDTH-160, 260)
-    x, y, w, h = area
-    fitted = ImageOps.contain(image.convert("L"), (w, h), Image.Resampling.LANCZOS)
-    img.paste(fitted, (x+(w-fitted.width)//2, y+(h-fitted.height)//2))
+    fitted = ImageOps.contain(image.convert("L"), (WIDTH-80, HEIGHT-(390 if caption else 80)), Image.Resampling.LANCZOS)
     if caption:
-        _fit_block(draw, caption, text_area, 100 if portrait else 66, True)
+        # Give a landscape picture's unused height to its headline instead of
+        # leaving a large fixed gap between the image and a small caption.
+        img.paste(fitted, ((WIDTH-fitted.width)//2,40))
+        top = fitted.height+80
+        _fit_block(draw, caption, (60,top,WIDTH-120,HEIGHT-top-40), 150, True)
+    else:
+        img.paste(fitted, ((WIDTH-fitted.width)//2,(HEIGHT-fitted.height)//2))
     return img
 
 

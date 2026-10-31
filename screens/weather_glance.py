@@ -19,6 +19,28 @@ def _fetch_weather_glance():
     return r.json()
 
 
+def _daily_range(data):
+    """Match the current observation's local date to its daily forecast."""
+    daily = data.get('daily', {})
+    day = str(data.get('current', {}).get('time', ''))[:10]
+    dates = daily.get('time', [])
+    if day not in dates:
+        return None
+    i = dates.index(day)
+    try:
+        low, high = daily['temperature_2m_min'][i], daily['temperature_2m_max'][i]
+        import math
+        if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (low, high)) or low > high:
+            return None
+        return low, high
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _range_fraction(temp, low, high):
+    return max(0, min(1, (temp-low)/(high-low))) if high > low else 0.5
+
+
 def render_weather_glance():
     from joan_dashboard import WMO_CODES
     data = _require(_cache_fetch("weather_glance", 900, 1800, _fetch_weather_glance))
@@ -28,6 +50,20 @@ def render_weather_glance():
     img, draw = _canvas()
     img.paste(weather_icon(code, 600), ((WIDTH-600)//2,40))
     _fit_block(draw, f"{round(temp)}°", (70,650,WIDTH-140,470), 390, True)
-    _fit_block(draw, WMO_CODES.get(code,'Weather unavailable'), (80,1190,WIDTH-160,180), 100, True)
-    _fit_block(draw, WEATHER_LOCATION, (80,1410,WIDTH-160,110), 62)
+    _fit_block(draw, WMO_CODES.get(code,'Weather unavailable'), (70,1080,WIDTH-140,160), 100, True)
+    limits = _daily_range(data)
+    if limits:
+        low, high = limits
+        x0, x1, y = 170, WIDTH-170, 1350
+        marker = round(x0 + _range_fraction(temp, low, high)*(x1-x0))
+        draw.rounded_rectangle((x0,y-12,x1,y+12),radius=12,fill=0)
+        for x in (x0,x1):
+            draw.line((x,y-30,x,y+30),fill=0,width=10)
+        # White halo keeps the current-temperature marker distinct from the rail.
+        draw.ellipse((marker-38,y-38,marker+38,y+38),fill=255)
+        draw.ellipse((marker-27,y-27,marker+27,y+27),fill=0)
+        draw.text((x0,1410), f'{round(low)}°', font=get_font(100,bold=True),fill=0,anchor='mt')
+        draw.text((x1,1410), f'{round(high)}°', font=get_font(100,bold=True),fill=0,anchor='mt')
+        draw.text((x0,1530), 'LOW', font=get_font(42,bold=True),fill=0,anchor='mm')
+        draw.text((x1,1530), 'HIGH', font=get_font(42,bold=True),fill=0,anchor='mm')
     return img
