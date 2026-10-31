@@ -72,7 +72,13 @@ def render_stock_ticker() -> Image.Image:
 
     stock = _select(stocks)
     img, draw = _canvas()
-    _fit_block(draw, stock['name'], (75, 133, 1050, 307), 140, True)
-    _fit_block(draw, f"{stock['price']:,.2f}", (75, 493, 1050, 467), 260, True)
-    _fit_block(draw, f"{stock['currency']}   {stock['change_pct']:+.2f}%", (75, 1067, 1050, 267), 100)
+    _poster_text(draw, stock['name'], (40,40,1120,250), 300)
+    _poster_text(draw, f"{stock['price']:,.2f}", (40,350,1120,500), 650)
+    _poster_text(draw, stock['currency'], (40,880,1120,90), 100, False)
+    up = stock['change_pct'] >= 0
+    arrow = [(450,1100),(450,1200),(350,1200),(600,1430),(850,1200),(750,1200),(750,1100)]
+    if up:
+        arrow = [(x,2530-y) for x,y in arrow]
+    draw.polygon(arrow, fill=0)
+    _poster_text(draw, f"{stock['change_pct']:+.2f}%", (40,1460,1120,110), 150)
     return img

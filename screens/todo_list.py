@@ -39,4 +39,8 @@ def render_todo_list() -> Image.Image:
     if not tasks:
         return _statement("All caught up", "No tasks to do")
     task = _select(tasks)
-    return _statement(task['title'], "To do" + (" by " + task['due'] if task.get('due') else ""))
+    img, draw = _canvas()
+    draw.rounded_rectangle((410,40,790,420),radius=25,outline=0,width=24)
+    _poster_text(draw,task['title'],(45,500,1110,900),500)
+    _poster_text(draw,'By '+task['due'] if task.get('due') else 'To do',(45,1480,1110,80),100,False)
+    return img

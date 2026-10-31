@@ -78,7 +78,7 @@ def render_torah_wisdom() -> Image.Image:
 
     _require(verse)
     img, draw = _canvas()
-    _fit_block(draw, verse.get('he',''), (80,80,WIDTH-160,650), 110)
-    _fit_block(draw, verse.get('en',''), (80,790,WIDTH-160,510), 90)
-    _fit_block(draw, verse.get('ref',''), (80,1390,WIDTH-160,130), 58)
+    _poster_text(draw, verse.get('he',''), (50,40,WIDTH-100,740), 270)
+    _poster_text(draw, verse.get('en',''), (50,840,WIDTH-100,590), 210, False)
+    _poster_text(draw, verse.get('ref',''), (50,1490,WIDTH-100,70), 80, False)
     return img

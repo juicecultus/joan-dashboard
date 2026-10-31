@@ -45,3 +45,24 @@ The audit renders all registered screens without starting the delivery service o
 On 31 October 2026 the retired `kmbd/collectionDay` endpoint returned a valid encrypted response containing `collectionDay: null`, even for a valid address. The replacement uses the council's `gdsv5` form service: create a lookup session, discover the web-service field and its input mapping, then read its collection table. The adapter follows the updated [UKBinCollectionData implementation](https://github.com/robbrad/UKBinCollectionData/blob/master/uk_bin_collection/uk_bin_collection/councils/BuckinghamshireCouncil.py); its MIT notice is retained in `docs/third-party`.
 
 The renderer groups all bins due on the next collection day, excludes past dates and does not extrapolate a recurring schedule. Yearless dates are inferred only within the next 90 days, including a year boundary. The live lookup and portrait render were verified on Max.
+
+## Large-content layouts and photo tones
+
+Poster layouts fit visible letter bounds, with one subject per screen. Dates use
+calendar shapes; tasks, learning and repositories use large pictograms; moon,
+progress, air quality and numerical displays fill the available portrait area.
+Both clock renderers retain their existing geometry and typography.
+
+Photos, art, movie posters and news images retain 256 gray levels through layout,
+rotation and fitting to the target device. `_picture` marks only the image area.
+`_prepare_device_image` transforms that mask with the canvas and then applies an
+8×8 Bayer pattern to sixteen levels (0,17,…,255), following Reader's tonal
+conversion. There is no subsequent interpolation. Text, pictograms, doodles and
+cartoon line art are excluded. Pure black and white stay exact. Source images
+are not mutated or automatically contrast-clipped. Visionect remains configured
+for 4-bit output with its own dithering disabled and neutral gamma, avoiding a
+second pattern or gamma shift. See [Visionect session options](https://docs.visionect.com/TechnicalDocumentation/AppDevelopment/deviceSettings.html).
+
+Audit previews now use the same final-pixel processing as the device. Photos can
+still have white margins when preserving their full aspect ratio; artwork and
+cartoon captions are not cropped away to fill portrait space.

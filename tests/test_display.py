@@ -47,6 +47,51 @@ class DisplayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             shared._fit_block(draw,'overflow',(100,100,1400,500))
 
+    def test_photo_dither_preserves_tones_and_extremes(self):
+        from photo_renderer import dither_photos
+        for gray in (0,8,23,81,142,201,255):
+            source = Image.new('L',(64,64),gray)
+            out = dither_photos(source,Image.new('L',source.size,255))
+            pixels = list(out.tobytes())
+            self.assertTrue(all(v % 17 == 0 for v in pixels))
+            self.assertLess(abs(sum(pixels)/len(pixels)-gray),1)
+            self.assertEqual(source.getpixel((0,0)),gray)
+            if gray in (0,255): self.assertEqual(set(pixels),{gray})
+            self.assertIsNone(ImageChops.difference(out,dither_photos(out,Image.new('L',out.size,255))).getbbox())
+
+    def test_photo_dither_follows_resize_rotation_and_spares_text(self):
+        from photo_renderer import dither_photos
+        from PIL import ImageOps
+        source = Image.new('L',(40,60),81)
+        draw = ImageDraw.Draw(source)
+        draw.rectangle((0,30,39,59),fill=142)
+        raw = source.copy()
+        source.info['photo_regions'] = [(0,0,40,30)]
+        for rotation in ('90','270'):
+            with patch.dict(os.environ,{'PORTRAIT_ROTATION':rotation}):
+                actual = _prepare_device_image(source,(120,80))
+                plain = _prepare_device_image(raw,(120,80))
+            mask = Image.new('L',source.size,0)
+            ImageDraw.Draw(mask).rectangle((0,0,39,29),fill=255)
+            mask = ImageOps.pad(mask.rotate(int(rotation),expand=True),(120,80),method=Image.Resampling.NEAREST,color=0)
+            expected = dither_photos(plain,mask)
+            self.assertIsNone(ImageChops.difference(actual,expected).getbbox())
+            outside = Image.composite(ImageChops.difference(actual,plain),Image.new('L',actual.size,0),ImageChops.invert(mask))
+            self.assertIsNone(outside.getbbox())
+            self.assertNotIn('photo_regions',actual.info)
+        self.assertEqual(source.getpixel((0,0)),81)
+
+    def test_poster_text_fills_box_without_clipping(self):
+        for text in ['42', 'Waxing Gibbous', 'A longer sentence with several words. '*5, 'W'*150]:
+            img, draw = shared._canvas()
+            shared._poster_text(draw,text,(40,50,1120,1200),800)
+            box = ImageChops.invert(img).getbbox()
+            self.assertTrue(box and box[0]>=40 and box[2]<=1160 and box[1]>=50 and box[3]<=1250,box)
+        img, draw = shared._canvas()
+        shared._poster_text(draw,'42',(40,50,1120,800),1100)
+        box = ImageChops.invert(img).getbbox()
+        self.assertGreater(box[3]-box[1],600)
+
     def test_missing_photo_directory_is_not_created(self):
         with tempfile.TemporaryDirectory() as d, patch('screens.family_photo.PHOTOS_DIR',d+'/missing'), patch('screens.family_photo.IMMICH_API_KEY',''):
             with self.assertRaises(shared.ScreenUnavailable): render_family_photo()

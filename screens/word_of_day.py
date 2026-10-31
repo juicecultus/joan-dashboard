@@ -67,6 +67,6 @@ def render_word_of_day() -> Image.Image:
 
     _require(definition, "Dictionary definition unavailable")
     img, draw = _canvas()
-    _fit_block(draw, word.capitalize(), (60, 160, 1080, 400), 190, True)
-    _fit_block(draw, definition, (90, 653, 1020, 773), 100)
+    _poster_text(draw, word.capitalize(), (40,40,WIDTH-80,350), 420)
+    _poster_text(draw, definition, (55,450,WIDTH-110,1100), 240, False)
     return img

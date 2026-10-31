@@ -39,4 +39,4 @@ def render_google_doodle() -> Image.Image:
     doodle = _cache_fetch(cache_key, 86400, 0, _fetch_google_doodle)
 
     _require(doodle)
-    return _picture(_require(_image_url(doodle['image_url'])), doodle['title'])
+    return _picture(_require(_image_url(doodle['image_url'])), doodle['title'], photo=False)

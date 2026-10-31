@@ -15,7 +15,7 @@ def _portrait_image(content):
         photo = ImageOps.exif_transpose(source).convert('L')
     if photo.height <= photo.width:
         return None
-    return ImageOps.autocontrast(photo, cutoff=1)
+    return photo
 
 
 def _immich_photo():

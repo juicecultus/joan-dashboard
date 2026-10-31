@@ -15,10 +15,10 @@ def render_year_progress() -> Image.Image:
     pct = day_of_year / total_days
 
     img, draw = _canvas()
-    _fit_block(draw, f"{pct*100:.0f}%", (60, 40, 1080, 533), 330, True)
+    _poster_text(draw, f"{pct*100:.0f}%", (40,30,1120,370), 500)
     # Each dot represents one day of this year.
     for i in range(total_days):
-        x, y = 88 + (i % 23)*45, 600 + (i//23)*42
-        draw.ellipse((x,y,x+24,y+24), fill=0 if i < day_of_year else 255, outline=0, width=2)
-    _fit_block(draw, f"{total_days-day_of_year} days left in {now.year}", (60, 1360, 1080, 147), 70)
+        x, y = 42 + (i % 23)*49, 470 + (i//23)*58
+        draw.ellipse((x,y,x+37,y+37), fill=0 if i < day_of_year else 255, outline=0, width=3)
+    _poster_text(draw, f"{total_days-day_of_year} days left · {now.year}", (40,1460,1120,100), 110)
     return img

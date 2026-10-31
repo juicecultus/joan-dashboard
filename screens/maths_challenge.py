@@ -42,4 +42,6 @@ def render_maths_challenge() -> Image.Image:
 
     random.shuffle(problems)
 
-    return _statement(problems[0], "What is the answer?", size=155)
+    # One problem, stacked like a classroom exercise; no redundant prompt.
+    problem = problems[0].replace(' = ?', '\n= ?')
+    return _statement(problem, size=650)

@@ -498,7 +498,7 @@ def _configure_vss_session(device_uuid: str):
                 "Fields": {"url": serve_url, "ReloadTimeout": "180"}
             },
             "Options": {
-                "Beautify": "pretty,gamma=1.1",
+                "Beautify": "pretty,gamma=1.0",  # Keep precomputed photo tones neutral.
                 "ChangesAutodetect": "true,threshold=0",
                 "DefaultDithering": "none",
                 "DefaultEncoding": "4"
@@ -663,12 +663,28 @@ def _prepare_device_image(img, target_size):
     from PIL import ImageOps
     if not target_size:
         target_size = (1600, 1200)
+    # Carry photo coverage alongside the full-tone canvas through all geometry.
+    mask = None
+    regions = img.info.get('photo_regions', [])
+    if regions:
+        mask = Image.new('L', img.size, 0)
+        md = ImageDraw.Draw(mask)
+        for left, top, right, bottom in regions:
+            md.rectangle((left,top,right-1,bottom-1),fill=255)
     if (img.width < img.height) != (target_size[0] < target_size[1]):
         rotation = int(os.environ.get("PORTRAIT_ROTATION", "90"))
         if rotation not in (90, 270):
             raise ValueError("PORTRAIT_ROTATION must be 90 or 270")
         img = img.rotate(rotation, expand=True)
-    return ImageOps.pad(img, target_size, method=Image.Resampling.LANCZOS, color=255)
+        if mask is not None:
+            mask = mask.rotate(rotation, expand=True)
+    out = ImageOps.pad(img, target_size, method=Image.Resampling.LANCZOS, color=255)
+    if mask is not None:
+        from photo_renderer import dither_photos
+        mask = ImageOps.pad(mask, target_size, method=Image.Resampling.NEAREST, color=0)
+        out = dither_photos(out, mask)
+    out.info.pop('photo_regions', None)
+    return out
 
 
 def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = None):

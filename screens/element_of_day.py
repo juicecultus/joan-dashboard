@@ -24,7 +24,7 @@ def render_element_of_day() -> Image.Image:
     draw.rectangle((50,50,1150,1550), outline=0, width=8)
     _fit_block(draw, el.get('atomic_number',''), (100,100,260,220), 140, True)
     _fit_block(draw, el.get('atomic_mass',''), (650,100,450,220), 86)
-    _fit_block(draw, el['symbol'], (100,390,1000,610), 420, True)
-    _fit_block(draw, el['name'], (100,1120,1000,190), 120, True)
-    _fit_block(draw, el.get('category',''), (100,1360,1000,120), 56)
+    _poster_text(draw, el['symbol'], (80,360,1040,800), 1100)
+    _poster_text(draw, el['name'], (85,1240,1030,160), 200)
+    _poster_text(draw, el.get('category',''), (85,1450,1030,60), 70, False)
     return img

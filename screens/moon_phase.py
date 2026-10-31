@@ -82,8 +82,8 @@ def render_moon_phase() -> Image.Image:
         name = "New Moon"
 
     illumination = (1-math.cos(2*math.pi*phase_pct))/2
-    _draw_moon(draw, WIDTH//2, 650, 480, phase_days)
-    draw.ellipse((WIDTH//2-480,170,WIDTH//2+480,1130), outline=0, width=5)
-    _fit_block(draw, name, (80,1190,WIDTH-160,180), 110, True)
-    _fit_block(draw, f"{illumination*100:.0f}% illuminated", (80,1410,WIDTH-160,100), 64)
+    _draw_moon(draw, WIDTH//2, 610, 570, phase_days)
+    draw.ellipse((30,40,1170,1180), outline=0, width=6)
+    _poster_text(draw, name, (40,1240,WIDTH-80,210), 180)
+    _poster_text(draw, f"{illumination*100:.0f}% lit", (40,1490,WIDTH-80,80), 90, False)
     return img

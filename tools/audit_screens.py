@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageStat
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from screens.registry import ALL_SCREENS
 from screens.shared import ScreenUnavailable
-from joan_dashboard import render_dashboard
+from joan_dashboard import render_dashboard, _prepare_device_image
 
 out = Path(sys.argv[1] if len(sys.argv)>1 else 'portrait-previews')
 out.mkdir(parents=True, exist_ok=True)
@@ -19,6 +19,8 @@ def render(item):
         assert img.size == (1200,1600), img.size
         assert img.mode == 'L', img.mode
         assert ImageStat.Stat(img).stddev[0] > 5, 'Empty image'
+        # Match physical panel processing, then rotate pixels only for viewing.
+        img = _prepare_device_image(img,(1600,1200)).rotate(-90,expand=True)
         img.save(out / (name+'.png'))
         return name, 'OK'
     except ScreenUnavailable as exc:

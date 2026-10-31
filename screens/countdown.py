@@ -36,7 +36,7 @@ def render_countdown() -> Image.Image:
 
     days, title, event_date = upcoming[0]
     img, draw = _canvas()
-    _fit_block(draw, "Today" if days == 0 else "Tomorrow" if days == 1 else str(days), (60, 107, 1080, 733), 440, True)
-    _fit_block(draw, title if days <= 1 else "days until " + title, (90, 867, 1020, 373), 110, True)
-    _fit_block(draw, event_date.strftime("%A %d %B"), (90, 1320, 1020, 147), 64)
+    _poster_text(draw, "Today" if days == 0 else "Tomorrow" if days == 1 else str(days), (40,40,1120,950), 1200)
+    _poster_text(draw, title if days <= 1 else "days to " + title, (45,1050,1110,360), 230)
+    _poster_text(draw, event_date.strftime("%-d %B"), (45,1480,1110,80), 95, False)
     return img

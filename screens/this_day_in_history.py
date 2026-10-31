@@ -21,7 +21,7 @@ def render_this_day_in_history() -> Image.Image:
 
     event = _select(events, 3600)
     img, draw = _canvas()
-    _fit_block(draw, event['year'], (75, 93, 1050, 440), 280, True)
-    _fit_block(draw, event['text'], (75, 587, 1050, 747), 106)
-    _fit_block(draw, now.strftime("On %d %B"), (75, 1387, 1050, 133), 56)
+    _poster_text(draw, event['year'], (40,40,WIDTH-80,340), 420)
+    _poster_text(draw, event['text'], (50,430,WIDTH-100,1000), 240)
+    _poster_text(draw, now.strftime("On %-d %B"), (50,1480,WIDTH-100,80), 85, False)
     return img

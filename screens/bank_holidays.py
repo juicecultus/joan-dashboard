@@ -22,4 +22,5 @@ def render_bank_holidays() -> Image.Image:
     event = _require(upcoming, "No upcoming holidays")[0]
     date = datetime.fromisoformat(event['date'])
     days = (date.date()-today).days
-    return _statement(event['title'], ("Today" if days == 0 else f"In {days} days") + "\n" + date.strftime("%A %d %B"))
+    return _calendar_page(str(date.day), date.strftime('%B'), event['title'],
+                          'Today' if days == 0 else f'In {days} days')

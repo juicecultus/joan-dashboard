@@ -25,7 +25,14 @@ def render_air_quality() -> Image.Image:
     value = _require(current.get("european_aqi"), "AQI missing")
     quality = next((label for limit, label in [(20,"Good"),(40,"Fair"),(60,"Moderate"),(80,"Poor"),(100,"Very poor")] if value <= limit), "Extremely poor")
     img, draw = _canvas()
-    _fit_block(draw, str(round(value)), (75, 93, 1050, 707), 440, True)
-    _fit_block(draw, quality + " air", (75, 853, 1050, 267), 140, True)
-    _fit_block(draw, "European air quality index\n" + WEATHER_LOCATION, (75, 1240, 1050, 227), 56)
+    # A six-segment gauge makes the index's position visible without a table.
+    _poster_text(draw, str(round(value)), (40,40,1120,800), 1100)
+    _poster_text(draw, quality + " air", (40,900,1120,260), 250)
+    selected = min(5,max(0,math.ceil(value/20)-1))
+    for i in range(6):
+        x = 50+i*185
+        draw.rounded_rectangle((x,1260,x+170,1360),radius=16,outline=0,width=9,fill=0 if i<=selected else 255)
+    x = 135+selected*185
+    draw.polygon([(x-24,1400),(x+24,1400),(x,1372)],fill=0)
+    _poster_text(draw, 'European air quality index', (40,1480,1120,80), 90, False)
     return img

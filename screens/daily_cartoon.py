@@ -58,4 +58,4 @@ def render_daily_cartoon():
     bounds = mask.getbbox()
     if bounds:
         cartoon = cartoon.crop(bounds)
-    return _picture(cartoon)
+    return _picture(cartoon, photo=False)

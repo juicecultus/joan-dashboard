@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Additional screens for Joan display playlist rotation.
 
-Each render_* function returns a 1600x1200 grayscale PIL Image.
+Each render_* function returns a 1200x1600 portrait grayscale PIL Image.
 """
 
 import hashlib
@@ -349,7 +349,7 @@ def _canvas():
     return img, ImageDraw.Draw(img)
 
 
-def _fit_block(draw, text, box, size=120, bold=False, font_fn=None):
+def _fit_block(draw, text, box, size=120, bold=False, font_fn=None, tight=False):
     """Fit complete text to a rectangle, including long tokens and CJK."""
     text = str(text or "")
     if not text:
@@ -382,23 +382,49 @@ def _fit_block(draw, text, box, size=120, bold=False, font_fn=None):
                     line += char
             lines.append(line)
         line_h = int(n * 1.3)
-        if len(lines) * line_h <= h:
+        if tight:
+            bounds = [draw.textbbox((0,0), line or ' ', font=font, anchor='mt',
+                      **({'direction':'rtl'} if rtl and _HAS_RAQM else {})) for line in lines]
+            gap = max(8, int(n*.16))
+            block_h = sum(b[3]-b[1] for b in bounds) + gap*(len(lines)-1)
+        else:
+            block_h = len(lines)*line_h
+        if block_h <= h:
             break
     else:
         raise ScreenUnavailable("Text too long for the display")
-    top = y + (h - len(lines) * line_h) // 2
-    for line in lines:
+    top = y + (h - block_h) // 2
+    for index, line in enumerate(lines):
         if rtl:
             line = _shape_rtl_text(line)
-        _draw_text_intl(draw, (x + w // 2, top), line, font=font, fill=0, anchor="mt", rtl=rtl)
-        top += line_h
+        baseline = top - bounds[index][1] if tight else top
+        _draw_text_intl(draw, (x + w // 2, baseline), line, font=font, fill=0, anchor="mt", rtl=rtl)
+        top += bounds[index][3]-bounds[index][1]+gap if tight else line_h
+
+
+def _poster_text(draw, text, box, size=500, bold=True, font_fn=None):
+    """Size the ink itself to its box; used by poster layouts, never clocks."""
+    return _fit_block(draw,text,box,size,bold,font_fn,tight=True)
+
+
+def _calendar_page(day, month, title, detail=''):
+    img, draw = _canvas()
+    draw.rounded_rectangle((40,90,WIDTH-40,HEIGHT-40),radius=40,outline=0,width=14)
+    for x in (270,WIDTH-270):
+        draw.rounded_rectangle((x-20,30,x+20,155),radius=20,fill=0)
+    _poster_text(draw,month,(80,190,WIDTH-160,140),160)
+    _poster_text(draw,day,(80,370,WIDTH-160,630),850)
+    _poster_text(draw,title,(85,1050,WIDTH-170,310),220)
+    if detail:
+        _poster_text(draw,detail,(85,1410,WIDTH-170,90),90,False)
+    return img
 
 
 def _statement(text, detail="", size=140):
     img, draw = _canvas()
-    _fit_block(draw, text, (60, 60, WIDTH-120, 1160 if detail else HEIGHT-120), max(size, 240), True)
+    _poster_text(draw, text, (50, 50, WIDTH-100, 1280 if detail else HEIGHT-100), max(size, 500))
     if detail:
-        _fit_block(draw, detail, (70, 1260, WIDTH-140, 280), 90)
+        _poster_text(draw, detail, (60, 1390, WIDTH-120, 150), 110, False)
     return img
 
 
@@ -414,23 +440,27 @@ def _image_url(url):
         source = ImageOps.exif_transpose(Image.open(BytesIO(r.content))).convert("RGBA")
         bg = Image.new("RGBA", source.size, "white")
         bg.alpha_composite(source)
-        return ImageOps.autocontrast(bg.convert("L"), cutoff=1)
+        return bg.convert("L")
     return _cache_fetch("image:" + url, 3600, 86400, fetch)
 
 
-def _picture(image, caption="", portrait=False):
+def _picture(image, caption="", portrait=False, photo=True):
     from PIL import ImageOps
     _require(image)
     img, draw = _canvas()
-    fitted = ImageOps.contain(image.convert("L"), (WIDTH-80, HEIGHT-(390 if caption else 80)), Image.Resampling.LANCZOS)
+    fitted = ImageOps.contain(image.convert("L"), (WIDTH-40, HEIGHT-(180 if portrait and caption else 390 if caption else 40)), Image.Resampling.LANCZOS)
     if caption:
         # Give a landscape picture's unused height to its headline instead of
         # leaving a large fixed gap between the image and a small caption.
-        img.paste(fitted, ((WIDTH-fitted.width)//2,40))
-        top = fitted.height+80
-        _fit_block(draw, caption, (60,top,WIDTH-120,HEIGHT-top-40), 150, True)
+        img.paste(fitted, ((WIDTH-fitted.width)//2,20))
+        top = fitted.height+50
+        _poster_text(draw, caption, (40,top,WIDTH-80,HEIGHT-top-30), 260)
     else:
         img.paste(fitted, ((WIDTH-fitted.width)//2,(HEIGHT-fitted.height)//2))
+    if photo:
+        left = (WIDTH-fitted.width)//2
+        top = 20 if caption else (HEIGHT-fitted.height)//2
+        img.info['photo_regions'] = [(left,top,left+fitted.width,top+fitted.height)]
     return img
 
 

@@ -73,6 +73,7 @@ def render_chinese_proverb() -> Image.Image:
     num = proverb.get("id", idx + 1)
 
     img, draw = _canvas()
-    _fit_block(draw, chinese, (80,160,WIDTH-160,530), 140, font_fn=_get_cjk_font)
-    _fit_block(draw, english, (80,850,WIDTH-160,530), 110)
+    # Allow CJK characters to wrap into a large calligraphic block.
+    _poster_text(draw, ' '.join(chinese), (50,40,WIDTH-100,830), 350, font_fn=_get_cjk_font)
+    _poster_text(draw, english, (50,940,WIDTH-100,610), 230, False)
     return img

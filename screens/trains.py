@@ -137,9 +137,11 @@ def render_trains():
     destination = destinations[0].get('locationName','') if destinations else ''
     status = 'Cancelled' if str(service.get('isCancelled','')).lower() == 'true' else service.get('etd','')
     img, draw = _canvas()
-    _fit_block(draw, service.get('std',''), (60,80,WIDTH-120,430), 310, True)
-    _fit_block(draw, destination, (80,570,WIDTH-160,300), 120, True)
-    _fit_block(draw, status, (80,940,WIDTH-160,200), 110, True)
+    _poster_text(draw, service.get('std',''), (40,40,1120,370), 470)
+    _poster_text(draw, destination, (40,470,1120,400), 300)
+    _poster_text(draw, status, (40,920,1120,180), 220)
     platform = service.get('platform')
-    _fit_block(draw, 'Platform ' + str(platform) if platform else 'Platform to be announced', (80,1240,WIDTH-160,220), 85)
+    _poster_text(draw, 'Platform' if platform else 'Platform pending', (40,1180,1120,100), 110,False)
+    if platform:
+        _poster_text(draw,str(platform),(40,1330,1120,230),320)
     return img

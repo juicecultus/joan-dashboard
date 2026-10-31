@@ -115,5 +115,5 @@ def render_literate_movies() -> Image.Image:
     poster_url = movie.get("poster_url", "")
 
     poster = _image_url(poster_url) if poster_url else None
-    caption = title + ("\n" + year if year else "") + ("\n" + director if director else "")
+    caption = title + (" (" + year + ")" if year else "")
     return _picture(poster, caption, portrait=True) if poster else _statement(title, year)

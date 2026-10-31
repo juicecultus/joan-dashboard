@@ -13,4 +13,10 @@ def render_daily_agenda() -> Image.Image:
     if not future:
         return _statement("Time to yourself", "No more events today")
     event = future[0]
-    return _statement(event["title"], "Today " + (event.get("time") or "All day"))
+    img, draw = _canvas()
+    draw.rounded_rectangle((130,50,1070,800),radius=35,outline=0,width=16)
+    for x in (340,860):
+        draw.line((x,25,x,160),fill=0,width=22)
+    _poster_text(draw, event.get('time') or 'All day', (170,230,860,390), 350)
+    _poster_text(draw,event['title'],(45,900,1110,650),500)
+    return img

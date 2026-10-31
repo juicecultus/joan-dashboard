@@ -24,24 +24,4 @@ def render_flip_date() -> Image.Image:
     day_num = str(now.day)             # e.g. "2"
     month_abbr = now.strftime("%b")    # e.g. "Mar"
 
-    # Layout constants
-    margin_x = 60
-    gap = 30
-    top_y = 80
-    panel_w = WIDTH - margin_x * 2
-    top_h = 540
-    bottom_h = 820
-    bottom_y = top_y + top_h + gap
-    half_w = (panel_w - gap) // 2
-
-    # Top panel: day name (full width)
-    _draw_flip_panel(img, draw, margin_x, top_y, panel_w, top_h, day_name, 180)
-
-    # Bottom-left: day number
-    _draw_flip_panel(img, draw, margin_x, bottom_y, half_w, bottom_h, day_num, 260)
-
-    # Bottom-right: month abbreviation
-    right_x = margin_x + half_w + gap
-    _draw_flip_panel(img, draw, right_x, bottom_y, half_w, bottom_h, month_abbr, 200)
-
-    return img
+    return _calendar_page(day_num, now.strftime('%B'), day_name)

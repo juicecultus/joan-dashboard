@@ -28,6 +28,6 @@ def render_upcoming_movies() -> Image.Image:
     movie = _select(_require(movies))
     title = movie.get('title', 'Untitled')
     date = movie.get('release_date', '')
-    caption = title + ("\n" + date if date else "")
+    caption = title
     poster = _image_url("https://image.tmdb.org/t/p/w780" + movie['poster_path']) if movie.get('poster_path') else None
     return _picture(poster, caption, portrait=True) if poster else _statement(title, date)
