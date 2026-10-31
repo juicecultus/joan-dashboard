@@ -59,8 +59,4 @@ def render_sleep_screen(wake_time="07:00") -> Image.Image:
     draw.text((WIDTH // 2, HEIGHT // 2 + 60), "Sleeping", fill=120, font=get_font(72, bold=True), anchor="mm")
     draw.text((WIDTH // 2, HEIGHT // 2 + 130), "Good night", fill=70, font=get_font(36), anchor="mm")
 
-    # Subtle footer
-    draw.text((WIDTH // 2, HEIGHT - 50), f"Back at {wake_time} · {datetime.now().strftime('%H:%M')}",
-              fill=50, font=get_font(22), anchor="mm")
-
     return img

@@ -96,9 +96,7 @@ def render_literate_movies() -> Image.Image:
 
     # Get list of all movie slugs (cached 24h)
     slugs = _cache_fetch("literate_movies_list", 86400, 604800, _fetch_literate_movies)
-    if not slugs:
-        _centered_text(draw, HEIGHT // 2, "No movies available", 40, fill=80)
-        return img
+    _require(slugs)
 
     # Pick movie based on day of year
     day = datetime.now().timetuple().tm_yday
@@ -107,9 +105,7 @@ def render_literate_movies() -> Image.Image:
     # Get movie details (cached 7 days)
     movie = _cache_fetch(f"litmovie:{slug}", 604800, 2592000,
                          lambda: _fetch_movie_details(slug))
-    if not movie:
-        _centered_text(draw, HEIGHT // 2, "Movie details unavailable", 40, fill=80)
-        return img
+    _require(movie)
 
     title = movie.get("title", slug.replace("-", " ").title())
     year = movie.get("year", "")
@@ -118,93 +114,6 @@ def render_literate_movies() -> Image.Image:
     cast = movie.get("cast", [])
     poster_url = movie.get("poster_url", "")
 
-    # Header
-    title_str = f"{title} ({year})" if year else title
-    title_font = _fit_font_to_width(title_str.upper(), WIDTH - PAD * 2, 72, min_size=44, bold=True)
-    draw.text((WIDTH // 2, 72), _truncate_text(title_font, title_str.upper(), WIDTH - PAD * 2),
-              fill=0, font=title_font, anchor="mt")
-    draw.line([(PAD, 166), (WIDTH - PAD, 166)], fill=120, width=3)
-
-    # Layout: two equal-width columns below the divider
-    footer_h = 60
-    footer_y = HEIGHT - footer_h
-    content_top = 194
-    gap = 48
-    card_w = int((WIDTH - PAD * 2 - gap) / 2)
-    card_h = int((footer_y - content_top) * 0.7)
-    card_x = 60
-    card_y = content_top + max(0, ((footer_y - content_top) - card_h) // 2)
-    right_x = card_x + card_w + gap
-    right_w = card_w
-    right_y = content_top
-
-    # Fetch and render poster
-    poster_drawn = False
-    if poster_url:
-        try:
-            rp = requests.get(poster_url, timeout=15,
-                              headers={"User-Agent": "JoanDashboard/1.0"})
-            rp.raise_for_status()
-            poster = Image.open(BytesIO(rp.content)).convert("L")
-            # Scale to fill the poster card while preserving aspect ratio
-            pw, ph = poster.size
-            scale = min(card_w / pw, card_h / ph)
-            new_w, new_h = int(pw * scale), int(ph * scale)
-            poster = poster.resize((new_w, new_h), Image.LANCZOS)
-            card_img = Image.new("L", (card_w, card_h), 255)
-            card_img.paste(poster, ((card_w - new_w) // 2, (card_h - new_h) // 2))
-            img.paste(card_img, (card_x, card_y))
-            draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h], outline=20, width=3)
-            poster_drawn = True
-        except Exception:
-            poster_drawn = False
-
-    if not poster_drawn:
-        draw.rectangle([card_x, card_y, card_x + card_w, card_y + card_h], fill=200, outline=180, width=3)
-        draw.text((card_x + card_w // 2, card_y + card_h // 2), "Poster unavailable",
-                  fill=100, font=get_font(32, bold=True), anchor="mm")
-
-    # Right column: movie context centered vertically
-    context_lines = []
-    if year:
-        context_lines.append((f"Directed by {director}" if director else "", get_font(28), 60))
-    elif director:
-        context_lines.append((f"Directed by {director}", get_font(28), 60))
-
-    if cast:
-        cast_str = ", ".join(cast)
-        context_lines.append((f"Starring {cast_str}", get_font(26), 70))
-
-    if desc:
-        context_lines.append((desc, get_font(26), 34))
-
-    rendered_blocks = []
-    for txt, font, line_h in context_lines:
-        if not txt:
-            continue
-        wrapped = _wrap_text(font, txt, right_w)
-        rendered_blocks.append((wrapped, font, line_h))
-
-    total_h = 0
-    for wrapped, font, line_h in rendered_blocks:
-        total_h += len(wrapped) * line_h + 14
-    if rendered_blocks:
-        total_h -= 14
-
-    ty = right_y + max(0, ((footer_y - right_y) - total_h) // 2)
-    for idx, (wrapped, font, line_h) in enumerate(rendered_blocks):
-        for ln in wrapped[:6]:
-            draw.text((right_x, ty), ln, fill=50 if font.size <= 26 else 30, font=font, anchor="lt")
-            ty += line_h
-        if idx < len(rendered_blocks) - 1:
-            ty += 14
-
-    # Footer bar
-    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=190)
-    draw.text((PAD + 10, footer_y + footer_h // 2), "Literate Movies",
-              fill=40, font=get_font(28, bold=True), anchor="lm")
-    draw.text((WIDTH - PAD - 10, footer_y + footer_h // 2),
-              f"#{(day % len(slugs)) + 1} of {len(slugs)}",
-              fill=80, font=get_font(24), anchor="rm")
-
-    return img
+    poster = _image_url(poster_url) if poster_url else None
+    caption = title + ("\n" + year if year else "") + ("\n" + director if director else "")
+    return _picture(poster, caption, portrait=True) if poster else _statement(title, year)

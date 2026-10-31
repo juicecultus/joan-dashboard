@@ -1,57 +1,79 @@
+"""Portrait-only photographs from Immich's read-only search and preview API."""
 from .shared import *
+from PIL import ImageOps
+from pathlib import Path
 
-# ── 4. Family Photo ──────────────────────────────────────────────────
+PHOTOS_DIR = os.environ.get('PHOTOS_DIR', '')
+IMMICH_URL = os.environ.get('IMMICH_URL', 'http://localhost:2283').rstrip('/')
+IMMICH_API_KEY = os.environ.get('IMMICH_API_KEY', '')
+_last_asset = None
 
-PHOTOS_DIR = os.environ.get("PHOTOS_DIR", "/Volumes/OWCM2RAID1/joan_photos")
+
+def _portrait_image(content):
+    """Orientation is checked on decoded pixels, after applying EXIF rotation."""
+    with Image.open(BytesIO(content)) as source:
+        photo = ImageOps.exif_transpose(source).convert('L')
+    if photo.height <= photo.width:
+        return None
+    return ImageOps.autocontrast(photo, cutoff=1)
 
 
-def render_family_photo() -> Image.Image:
-    """Display a random photo from PHOTOS_DIR — new photo each rotation.
+def _immich_photo():
+    global _last_asset
+    _require(IMMICH_API_KEY, 'Immich API key not configured')
+    base = IMMICH_URL if IMMICH_URL.endswith('/api') else IMMICH_URL + '/api'
+    headers = {'x-api-key': IMMICH_API_KEY}
+    # Filter out videos and non-timeline assets on the server and again locally.
+    response = requests.post(base + '/search/random', headers=headers,
+        json={'size': 100, 'type': 'IMAGE', 'visibility': 'timeline', 'isOffline': False, 'withExif': True}, timeout=10)
+    response.raise_for_status()
+    assets = response.json()
+    if not isinstance(assets, list):
+        raise ScreenUnavailable('Unexpected Immich search response')
+    candidates = []
+    for asset in assets:
+        if asset.get('type') != 'IMAGE' or asset.get('isTrashed') or asset.get('isArchived') or asset.get('isOffline'):
+            continue
+        if asset.get('visibility') != 'timeline':
+            continue
+        exif = asset.get('exifInfo') or {}
+        w = asset.get('width') or exif.get('exifImageWidth')
+        h = asset.get('height') or exif.get('exifImageHeight')
+        orientation = str(exif.get('orientation',''))
+        if w and h and h <= w and orientation not in ('5','6','7','8'):
+            continue
+        if asset.get('id'):
+            candidates.append(asset)
+    candidates.sort(key=lambda a: a['id'] == _last_asset)
+    for asset in candidates[:8]:
+        try:
+            result = requests.get(base + '/assets/' + asset['id'] + '/thumbnail',
+                headers=headers, params={'size': 'preview'}, timeout=6, allow_redirects=False)
+            result.raise_for_status()
+            if result.status_code != 200:
+                continue
+            photo = _portrait_image(result.content)
+            if photo is not None:
+                _last_asset = asset['id']
+                return _picture(photo)
+        except (requests.RequestException, OSError, ValueError):
+            continue
+    raise ScreenUnavailable('No readable portrait photos returned by Immich')
 
-    Set PHOTOS_DIR env var or drop images into the photos/ folder.
-    On Pi, mount a network share (e.g. SMB) to /mnt/joan_photos.
-    """
-    img = Image.new("L", (WIDTH, HEIGHT), 255)
-    draw = ImageDraw.Draw(img)
 
-    if not os.path.isdir(PHOTOS_DIR):
-        os.makedirs(PHOTOS_DIR, exist_ok=True)
-
-    exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-    photos = [f for f in os.listdir(PHOTOS_DIR) if os.path.splitext(f)[1].lower() in exts]
-    print(f"[photo] PHOTOS_DIR={PHOTOS_DIR}  found {len(photos)} photos")
-
-    if not photos:
-        draw.text((WIDTH // 2, HEIGHT // 2 - 40), "Family Photos", fill=0, font=get_font(50, bold=True), anchor="mm")
-        draw.text((WIDTH // 2, HEIGHT // 2 + 20), "Add photos to:", fill=120, font=get_font(30), anchor="mm")
-        draw.text((WIDTH // 2, HEIGHT // 2 + 60), PHOTOS_DIR, fill=160, font=get_font(22), anchor="mm")
-        return img
-
-    photo_file = random.choice(photos)
-
-    try:
-        photo = Image.open(os.path.join(PHOTOS_DIR, photo_file))
-        photo = photo.convert("L")
-
-        # Resize to fill, maintaining aspect ratio, then center-crop
-        pw, ph = photo.size
-        scale = max(WIDTH / pw, HEIGHT / ph)
-        new_w = int(pw * scale)
-        new_h = int(ph * scale)
-        photo = photo.resize((new_w, new_h), Image.LANCZOS)
-
-        # Center crop
-        left = (new_w - WIDTH) // 2
-        top = (new_h - HEIGHT) // 2
-        photo = photo.crop((left, top, left + WIDTH, top + HEIGHT))
-
-        # Enhance contrast for e-ink
-        from PIL import ImageOps
-        photo = ImageOps.autocontrast(photo, cutoff=1)
-
-        print(f"[photo] Rendered: {photo_file}")
-        return photo
-    except Exception as e:
-        print(f"[photo] Failed to load {photo_file}: {e}")
-        draw.text((WIDTH // 2, HEIGHT // 2), "Error loading photo", fill=80, font=get_font(40), anchor="mm")
-        return img
+def render_family_photo():
+    if IMMICH_API_KEY or not PHOTOS_DIR:
+        return _immich_photo()
+    # Optional local-folder fallback also obeys the portrait-only rule.
+    directory = Path(PHOTOS_DIR)
+    extensions = {'.jpg','.jpeg','.png','.bmp','.webp'}
+    photos = [f for f in directory.rglob('*') if f.suffix.lower() in extensions] if directory.is_dir() else []
+    random.shuffle(photos)
+    for path in photos:
+        try:
+            photo = _portrait_image(path.read_bytes())
+            if photo is not None:
+                return _picture(photo)
+        except (OSError, ValueError):
+            continue
+    raise ScreenUnavailable('Photo folder contains no readable portrait photos')

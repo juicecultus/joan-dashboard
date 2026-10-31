@@ -65,53 +65,8 @@ def render_word_of_day() -> Image.Image:
         definition = result.get("definition", "")
         example = result.get("example", "")
 
-    # Header
-    draw.text((WIDTH // 2, 80), "Word of the Day", fill=120, font=get_font(32), anchor="mt")
-    draw.line([(PAD, 130), (WIDTH - PAD, 130)], fill=200, width=1)
-
-    # Word — large
-    word_font = _fit_font_to_width(word.capitalize(), WIDTH - 200, 100, min_size=56, bold=True)
-    draw.text((WIDTH // 2, 220), _truncate_text(word_font, word.capitalize(), WIDTH - 200),
-              fill=0, font=word_font, anchor="mt")
-
-    # Phonetic
-    if phonetic:
-        draw.text((WIDTH // 2, 340), phonetic, fill=120, font=get_font(36), anchor="mt")
-
-    # Part of speech
-    y = 400
-    if part_of_speech:
-        draw.text((WIDTH // 2, y), part_of_speech.lower(), fill=100, font=get_font(30, bold=True), anchor="mt")
-        y += 50
-
-    # Definition + example (larger + vertically centered block)
-    draw.line([(PAD + 100, y), (WIDTH - PAD - 100, y)], fill=200, width=1)
-    y += 30
-
-    def_font = get_font(57)
-    ex_font = get_font(45)
-    max_def_w = WIDTH - 200
-    max_ex_w = WIDTH - 240
-
-    def_lines = _wrap_text(def_font, definition, max_def_w) if definition else []
-    ex_lines = _wrap_text(ex_font, f'"{example}"', max_ex_w) if example else []
-
-    def_h = int(57 * 1.35) * len(def_lines)
-    ex_h = int(45 * 1.35) * len(ex_lines)
-    total_h = def_h + (40 if def_lines and ex_lines else 0) + ex_h
-    content_top = y
-    content_bottom = HEIGHT - 120
-    y = content_top + max(0, (content_bottom - content_top - total_h) // 2)
-
-    for ln in def_lines:
-        draw.text((WIDTH // 2, y), ln, fill=30, font=def_font, anchor="mt")
-        y += int(57 * 1.35)
-
-    if ex_lines:
-        y += 40
-        for ln in ex_lines:
-            draw.text((WIDTH // 2, y), ln, fill=100, font=ex_font, anchor="mt")
-            y += int(45 * 1.35)
-
-    _footer(draw, now_str())
+    _require(definition, "Dictionary definition unavailable")
+    img, draw = _canvas()
+    _fit_block(draw, word.capitalize(), (60, 160, 1080, 400), 190, True)
+    _fit_block(draw, definition, (90, 653, 1020, 773), 100)
     return img

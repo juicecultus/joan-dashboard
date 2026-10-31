@@ -58,8 +58,8 @@ IMAGE_SERVE_PORT = int(os.environ.get("IMAGE_SERVE_PORT", "8888"))
 # Host IP reachable from inside the VSS Docker container (docker0 bridge)
 IMAGE_SERVE_HOST = os.environ.get("IMAGE_SERVE_HOST", "172.17.0.1")
 
-WIDTH = 1600
-HEIGHT = 1200
+WIDTH = 1200
+HEIGHT = 1600
 PREVIEW_DIR = Path("/previews")
 FALLBACK_PREVIEW_DIR = Path(__file__).resolve().parent / "previews"
 
@@ -411,257 +411,8 @@ def draw_separator(draw: ImageDraw.Draw, y: int, margin: int = 100):
 
 
 def render_dashboard() -> Image.Image:
-    """Render the dashboard as a 1600x1200 grayscale image."""
-    img = Image.new("L", (WIDTH, HEIGHT), 255)
-    draw = ImageDraw.Draw(img)
-    now = datetime.now()
-
-    # ── Grid constants ──
-    PAD = 40
-    GAP = 20
-    LINE_H = 38
-    HEADER_H = 420     # double-height header
-    COL_DIV = 800      # divider for bottom 2-col area
-    L = PAD
-    R_END = WIDTH - PAD
-
-    # Header 3-column boundaries
-    H_COL1_END = 480   # clock column
-    H_COL2_L = 500     # date + calendar column
-    H_COL2_END = 980
-    H_COL3_L = 1000    # weather column
-
-    def hline(y, x0=L, x1=R_END):
-        draw.line([(x0, y), (x1, y)], fill=180, width=2)
-
-    def vline(x, y0, y1):
-        draw.line([(x, y0), (x, y1)], fill=180, width=2)
-
-    # ═══════════════════════════════════════════════
-    # HEADER: 3 columns — Clock | Date+Calendar | Weather
-    # ═══════════════════════════════════════════════
-
-    # ── Col 1: Clock ──
-    clock_cx = (L + H_COL1_END) // 2
-    draw.text((clock_cx, HEADER_H // 2 - 10), now.strftime("%H:%M"), fill=0, font=get_font(130, bold=True), anchor="mm")
-
-    vline(H_COL1_END + 10, PAD, HEADER_H - PAD)
-
-    # ── Col 2: Date + Calendar ──
-    col2_cx = (H_COL2_L + H_COL2_END) // 2
-
-    # Date line at top
-    draw.text((col2_cx, 24), now.strftime("%B %Y"), fill=40, font=get_font(30, bold=True), anchor="mt")
-
-    # Calendar grid centered in remaining space below date
-    cal_obj = calendar.Calendar(firstweekday=0)
-    month_days = cal_obj.monthdayscalendar(now.year, now.month)
-    num_weeks = len(month_days)
-
-    cal_top = 62       # below date text
-    cal_avail_w = H_COL2_END - H_COL2_L
-    cal_avail_h = HEADER_H - cal_top - 10
-    cell_x = min(cal_avail_w // 7, 52)    # cap cell width for tighter grid
-    grid_rows = 1 + num_weeks
-    cell_y = min(cal_avail_h // grid_rows, 52)  # cap to match horizontal
-    grid_w = 7 * cell_x
-    grid_h = grid_rows * cell_y
-
-    cal_x0 = H_COL2_L + (cal_avail_w - grid_w) // 2
-    cal_y0 = cal_top + (cal_avail_h - grid_h) // 2
-
-    # Day name headers
-    for i, dn in enumerate(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]):
-        cx = cal_x0 + i * cell_x + cell_x // 2
-        draw.text((cx, cal_y0 + cell_y // 2), dn, fill=100, font=get_font(22, bold=True), anchor="mm")
-
-    # Date rows
-    for wi, week in enumerate(month_days):
-        ry = cal_y0 + (1 + wi) * cell_y
-        for i, d_num in enumerate(week):
-            if d_num == 0:
-                continue
-            cx = cal_x0 + i * cell_x + cell_x // 2
-            cy = ry + cell_y // 2
-            if d_num == now.day:
-                r = min(cell_x, cell_y) // 2 - 2
-                draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=0)
-                draw.text((cx, cy), str(d_num), fill=255, font=get_font(22, bold=True), anchor="mm")
-            else:
-                draw.text((cx, cy), str(d_num), fill=40, font=get_font(22), anchor="mm")
-
-    vline(H_COL2_END + 10, PAD, HEADER_H - PAD)
-
-    # ── Col 3: Weather ──
-    weather = fetch_weather()
-    wx = H_COL3_L
-    wx_end = R_END
-    wx_cx = (wx + wx_end) // 2
-
-    if weather:
-        draw.text((wx_cx, 26), f"{weather['temp_c']}°", fill=0, font=get_font(90, bold=True), anchor="mt")
-        draw.text((wx_cx, 120), weather["desc"], fill=30, font=get_font(30, bold=True), anchor="mt")
-        draw.text((wx_cx, 155), f"Feels {weather['feels_like_c']}°", fill=80, font=get_font(26), anchor="mt")
-
-        # Sunrise / Sunset with drawn icons
-        sun_set_y = 200
-        gap = 30
-        rise_text = weather['sunrise']
-        set_text = weather['sunset']
-        # Measure text widths to center the whole group
-        rise_font = get_font(26)
-        rise_w = rise_font.getlength(rise_text)
-        set_w = rise_font.getlength(set_text)
-        icon_w = 38  # icon diameter area + spacing
-        total_w = icon_w + rise_w + gap + icon_w + set_w
-        start_x = int(wx_cx - total_w // 2)
-        draw_sun_icon(draw, start_x + 12, sun_set_y, r=10, fill=60)
-        draw.text((start_x + icon_w, sun_set_y), rise_text, fill=60, font=rise_font, anchor="lm")
-        moon_x = int(start_x + icon_w + rise_w + gap)
-        draw_moon_icon(draw, moon_x + 12, sun_set_y, r=10, fill=60)
-        draw.text((moon_x + icon_w, sun_set_y), set_text, fill=60, font=rise_font, anchor="lm")
-
-        # 3-day forecast: Today on its own row, then Fri + Sat side by side
-        # Evenly spaced within remaining area (256 to HEADER_H)
-        fc_top = 256
-        fc_bot = HEADER_H - 10
-        fc_mid = fc_top + (fc_bot - fc_top) // 2
-        draw.line([(wx, fc_top), (wx_end, fc_top)], fill=180, width=1)
-
-        forecast = weather["forecast"]
-        # Today — full width centered, 2 lines
-        if len(forecast) > 0:
-            day = forecast[0]
-            precip = day.get("precip_prob", 0) or 0
-            precip_str = f" {precip}%" if precip > 0 else ""
-            today_y = fc_top + 12
-            draw.text((wx_cx, today_y), f"Today {day['high_c']}°/{day['low_c']}°", fill=0, font=get_font(26, bold=True), anchor="mt")
-            draw.text((wx_cx, today_y + 30), f"{day['desc'][:14]}{precip_str}", fill=80, font=get_font(24), anchor="mt")
-
-        # Fri + Sat side by side, centered
-        if len(forecast) > 1:
-            pair_y = fc_mid + 10
-            fc_half = (wx_end - wx) // 2
-            for i, day in enumerate(forecast[1:3]):
-                try:
-                    d = datetime.strptime(day["date"], "%Y-%m-%d")
-                    day_name = d.strftime("%a")
-                except ValueError:
-                    day_name = "?"
-                cx = wx + i * fc_half + fc_half // 2
-                precip = day.get("precip_prob", 0) or 0
-                precip_str = f" {precip}%" if precip > 0 else ""
-                draw.text((cx, pair_y), f"{day_name} {day['high_c']}°/{day['low_c']}°", fill=0, font=get_font(26, bold=True), anchor="mt")
-                draw.text((cx, pair_y + 30), f"{day['desc'][:12]}{precip_str}", fill=80, font=get_font(24), anchor="mt")
-    else:
-        draw.text((wx_cx, HEADER_H // 2), "Weather\nunavailable", fill=120, font=get_font(30), anchor="mm")
-
-    # Full-width divider under header
-    hline(HEADER_H)
-
-    # ═══════════════════════════════════════════════
-    # BOTTOM: 2 columns — To Do (left) | Schedule (right)
-    # ═══════════════════════════════════════════════
-    B_L = L
-    B_L_END = COL_DIV - GAP
-    B_R = COL_DIV + GAP
-    B_R_END = R_END
-
-    # ── Column divider ──
-    vline(COL_DIV, HEADER_H + 10, HEIGHT - 40)
-
-    # ── Left: To Do ──
-    dy = HEADER_H + GAP * 2
-    todo_cx = (B_L + B_L_END) // 2
-    draw.text((todo_cx, dy), "To Do", fill=0, font=get_font(32, bold=True), anchor="mt")
-    dy += 42
-
-    tasks = fetch_tasks()
-    if tasks:
-        remaining = HEIGHT - 50 - dy
-        max_tasks = max(4, remaining // LINE_H)
-        for task in tasks[:max_tasks]:
-            box_top = dy + (LINE_H - 24) // 2
-            draw.rectangle([B_L, box_top, B_L + 24, box_top + 24], outline=60, width=2)
-            task_font = get_font(26)
-            draw.text((B_L + 36, dy + LINE_H // 2), _truncate_text(task_font, task["title"], B_L_END - (B_L + 36)),
-                      fill=20, font=task_font, anchor="lm")
-            dy += LINE_H
-    else:
-        draw.text((B_L, dy), "No tasks", fill=120, font=get_font(26), anchor="lt")
-
-    # ── Right: Schedule ──
-    ry = HEADER_H + GAP * 2
-
-    sched_cx = (B_R + B_R_END) // 2
-    draw.text((sched_cx, ry), "Schedule", fill=0, font=get_font(34, bold=True), anchor="mt")
-    ry += 46
-
-    # Today
-    week_events = fetch_week_events()
-    today_key = now.strftime("%Y-%m-%d")
-    today_events = week_events.get(today_key, [])
-
-    draw.text((B_R, ry), "Today", fill=0, font=get_font(28, bold=True), anchor="lt")
-    ry += 34
-
-    if today_events:
-        for ev in today_events[:5]:
-            time_label = ev["time"] if ev["time"] else "All day"
-            draw.text((B_R + 12, ry), time_label, fill=80, font=get_font(26, bold=True), anchor="lt")
-            event_font = get_font(26)
-            draw.text((B_R + 120, ry), _truncate_text(event_font, ev["title"], B_R_END - (B_R + 120)),
-                      fill=20, font=event_font, anchor="lt")
-            ry += 34
-    else:
-        draw.text((B_R + 12, ry), "No events today", fill=120, font=get_font(26), anchor="lt")
-        ry += 34
-
-    ry += 10
-    draw.line([(B_R, ry), (B_R_END, ry)], fill=180, width=1)
-    ry += GAP * 2
-
-    # This Week
-    draw.text((B_R, ry), "This Week", fill=0, font=get_font(28, bold=True), anchor="lt")
-    ry += 44
-
-    monday = now - timedelta(days=now.weekday())
-    has_week_events = False
-    for i in range(7):
-        day_date = monday + timedelta(days=i)
-        date_key = day_date.strftime("%Y-%m-%d")
-        events = week_events.get(date_key, [])
-        if not events or date_key == today_key or day_date.date() < now.date():
-            continue
-        has_week_events = True
-        day_label = day_date.strftime("%a %d")
-        draw.text((B_R, ry), day_label, fill=0, font=get_font(26, bold=True), anchor="lt")
-        ry += 32
-        for ev in events:
-            t = ev["time"] or ""
-            prefix = f"{t} " if t else ""
-            event_font = get_font(26)
-            draw.text((B_R + 12, ry), _truncate_text(event_font, f"{prefix}{ev['title']}", B_R_END - (B_R + 12)),
-                      fill=50, font=event_font, anchor="lt")
-            ry += 32
-        ry += 6
-
-    if not has_week_events:
-        draw.text((B_R + 12, ry), "No upcoming events", fill=120, font=get_font(26), anchor="lt")
-
-    # ── Footer ──
-    footer_left = f"{WEATHER_LOCATION}  ·  Updated {now.strftime('%H:%M')}"
-    draw.text((L, HEIGHT - 28), footer_left, fill=160, font=get_font(26), anchor="lm")
-    dev = fetch_device_status()
-    footer_parts = []
-    if dev["temperature"]:
-        footer_parts.append(f"Room {dev['temperature']}°C")
-    if dev["battery"]:
-        footer_parts.append(f"Batt {dev['battery']}%")
-    if footer_parts:
-        draw.text((R_END, HEIGHT - 28), "  ·  ".join(footer_parts), fill=160, font=get_font(26), anchor="rm")
-
-    return img
+    from screens.weather_glance import render_weather_glance
+    return render_weather_glance()
 
 
 # --- Image-serving HTTP server ---
@@ -707,11 +458,14 @@ class _ImageHandler(BaseHTTPRequestHandler):
                 self.send_error(404, "No image available yet")
                 return
         with open(fpath, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
+            image_bytes = f.read()
+        with Image.open(io.BytesIO(image_bytes)) as served_image:
+            frame_width, frame_height = served_image.size
+        b64 = base64.b64encode(image_bytes).decode()
         html = (f'<!DOCTYPE html><html><head><meta charset="utf-8">'
-                f'<meta name="viewport" content="width=1600,height=1200,initial-scale=1">'
+                f'<meta name="viewport" content="width={frame_width},height={frame_height},initial-scale=1">'
                 f'<style>*{{margin:0;padding:0}}body{{overflow:hidden;background:#fff}}'
-                f'img{{display:block;width:1600px;height:1200px}}</style></head>'
+                f'img{{display:block;width:{frame_width}px;height:{frame_height}px}}</style></head>'
                 f'<body><img src="data:image/png;base64,{b64}"></body></html>')
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
@@ -900,6 +654,23 @@ def _get_devices() -> list:
     return _discovered_devices
 
 
+def _prepare_device_image(img, target_size):
+    """Rotate portrait artwork into the panel's native landscape framebuffer.
+
+    Mount the display 90 degrees to the right from landscape. Set
+    PORTRAIT_ROTATION=270 for the opposite mounting direction.
+    """
+    from PIL import ImageOps
+    if not target_size:
+        target_size = (1600, 1200)
+    if (img.width < img.height) != (target_size[0] < target_size[1]):
+        rotation = int(os.environ.get("PORTRAIT_ROTATION", "90"))
+        if rotation not in (90, 270):
+            raise ValueError("PORTRAIT_ROTATION must be 90 or 270")
+        img = img.rotate(rotation, expand=True)
+    return ImageOps.pad(img, target_size, method=Image.Resampling.LANCZOS, color=255)
+
+
 def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = None):
     """Push a PIL Image to a Joan device.
 
@@ -916,16 +687,16 @@ def push_image(img: Image.Image, device_uuid: str = None, target_size: tuple = N
         return
 
     # Resize to device native resolution if different from canvas
-    out = img
-    if target_size and (img.width, img.height) != target_size:
-        out = img.resize(target_size, Image.LANCZOS)
+    out = _prepare_device_image(img, target_size)
 
     # Convert to RGB PNG
     rgb = out.convert("RGB")
 
     # Save to serve directory for the HTTP image server
     serve_path = os.path.join(_SERVE_DIR, f"{uuid}.png")
-    rgb.save(serve_path, format="PNG")
+    temp_path = serve_path + ".tmp"
+    rgb.save(temp_path, format="PNG")
+    os.replace(temp_path, serve_path)
     fsize = os.path.getsize(serve_path)
     print(f"[push] -> {uuid[:12]}... {out.width}x{out.height} ({fsize} bytes)")
 
@@ -1076,18 +847,6 @@ def main():
         print(f"[playlist] Rotating {len(screens)} screens, {interval}s each, active {args.active_hours}: {[s[0] for s in screens]}")
         print(f"[devices] Pushing to {len(devices)} device(s): {dev_info}")
 
-        def _render_error_screen(screen_name, error_msg):
-            """Render a minimal error placeholder so the device doesn't show stale content."""
-            img = Image.new("L", (WIDTH, HEIGHT), 255)
-            draw = ImageDraw.Draw(img)
-            draw.text((WIDTH // 2, HEIGHT // 2 - 40), f"Screen: {screen_name}",
-                      fill=100, font=get_font(36, bold=True), anchor="mm")
-            draw.text((WIDTH // 2, HEIGHT // 2 + 20), f"Error: {str(error_msg)[:80]}",
-                      fill=120, font=get_font(28), anchor="mm")
-            draw.text((WIDTH // 2, HEIGHT // 2 + 70), f"Will retry next cycle",
-                      fill=160, font=get_font(24), anchor="mm")
-            return img
-
         screen_idx = 0
         _prev_order = None  # track config changes
 
@@ -1141,11 +900,11 @@ def main():
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Rendering: {name} ({screen_idx + 1}/{len(screens)})")
                 render_and_push_all(render_fn)
             except Exception as e:
-                print(f"[{name}] Error: {e}")
-                try:
-                    render_and_push_all(lambda: _render_error_screen(name, e))
-                except Exception:
-                    pass  # device unreachable, nothing we can do
+                # Keep the last useful frame; try the next slot immediately.
+                print(f"[{name}] Skipping unavailable screen: {e}")
+                screen_idx += 1
+                time.sleep(min(5, interval))
+                continue
 
             screen_idx += 1
             print(f"[playlist] Next screen in {interval}s")

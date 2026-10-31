@@ -16,7 +16,7 @@ def _draw_flip_panel(img, draw, x, y, w, h, text, font_size, radius=24):
 
 def render_flip_date() -> Image.Image:
     """Render a flip-calendar date screen (day name, day number, month)."""
-    img = Image.new("L", (WIDTH, HEIGHT), 235)
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(img)
 
     now = datetime.now()
@@ -29,8 +29,8 @@ def render_flip_date() -> Image.Image:
     gap = 30
     top_y = 80
     panel_w = WIDTH - margin_x * 2
-    top_h = 420
-    bottom_h = 520
+    top_h = 540
+    bottom_h = 820
     bottom_y = top_y + top_h + gap
     half_w = (panel_w - gap) // 2
 

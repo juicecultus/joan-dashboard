@@ -63,10 +63,7 @@ def render_chinese_proverb() -> Image.Image:
     draw = ImageDraw.Draw(img)
 
     proverbs = _cache_fetch("chinese_proverbs", 86400, 604800, _fetch_proverbs)
-    if not proverbs:
-        _centered_text(draw, HEIGHT // 2, "No proverbs available", 40, fill=80)
-        _footer(draw, now_str())
-        return img
+    _require(proverbs)
 
     # Pick a proverb based on day-of-year so it rotates daily
     idx = datetime.now().timetuple().tm_yday % len(proverbs)
@@ -75,43 +72,7 @@ def render_chinese_proverb() -> Image.Image:
     chinese = proverb.get("chinese", "")
     num = proverb.get("id", idx + 1)
 
-    # Header
-    draw.text((WIDTH // 2, 80), "Chinese Proverb", fill=120, font=get_font(32), anchor="mt")
-    draw.line([(PAD, 130), (WIDTH - PAD, 130)], fill=200, width=1)
-
-    # English Translation — large (like the 'Word' in Word of Day)
-    eng_font = _fit_font_to_width(english, WIDTH - 200, 80, min_size=44, bold=True)
-    # We use a wrapped block here if it's long, but keep it centered around y=220
-    eng_lines = _wrap_text(eng_font, english, WIDTH - 200)
-    eng_line_h = int(eng_font.size * 1.2)
-    eng_y = 220 - (len(eng_lines) * eng_line_h // 2) + 40
-    for ln in eng_lines:
-        draw.text((WIDTH // 2, eng_y), ln, fill=0, font=eng_font, anchor="mt")
-        eng_y += eng_line_h
-
-    # Divider line for Chinese text
-    y = max(450, eng_y + 40)
-    draw.line([(PAD + 100, y), (WIDTH - PAD - 100, y)], fill=200, width=1)
-    y += 40
-
-    # Chinese text — centered vertically in remaining space
-    if chinese:
-        ch_font, ch_lines, ch_line_h = _fit_cjk_wrapped_text(
-            chinese,
-            WIDTH - 240,
-            HEIGHT - y - 120,
-            56,
-            24
-        )
-        
-        total_ch_h = len(ch_lines) * ch_line_h
-        content_top = y
-        content_bottom = HEIGHT - 120
-        ch_y = content_top + max(0, (content_bottom - content_top - total_ch_h) // 2)
-        
-        for ln in ch_lines:
-            draw.text((WIDTH // 2, ch_y), ln, fill=60, font=ch_font, anchor="mt")
-            ch_y += ch_line_h
-
-    _footer(draw, f"Chinese Proverbs — #{num}")
+    img, draw = _canvas()
+    _fit_block(draw, chinese, (80,160,WIDTH-160,530), 140, font_fn=_get_cjk_font)
+    _fit_block(draw, english, (80,850,WIDTH-160,530), 110)
     return img

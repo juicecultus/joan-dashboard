@@ -48,87 +48,14 @@ def _fetch_daily_cartoon():
     return {"image_url": img_url, "caption": caption, "title": title}
 
 
-def render_daily_cartoon() -> Image.Image:
-    """Render The New Yorker's Daily Cartoon with auto-cropped whitespace."""
-    from PIL import ImageOps
-    img = Image.new("L", (WIDTH, HEIGHT), 230)
-    draw = ImageDraw.Draw(img)
-
-    data = _cache_fetch("newyorker_cartoon", 43200, 172800, _fetch_daily_cartoon)
-
-    if not data:
-        _centered_text(draw, HEIGHT // 2, "No cartoon available", 40, fill=80)
-        _footer(draw, now_str())
-        return img
-
-    caption = data.get("caption", "")
-    title = data.get("title", "Daily Cartoon")
-
-    # Reserve space for caption at bottom
-    caption_h = 0
-    caption_lines = []
-    if caption:
-        cap_font = get_font(36)
-        caption_lines = _wrap_text(cap_font, f'"{caption}"', WIDTH - PAD * 2 - 40)
-        caption_h = len(caption_lines) * 48 + 30
-
-    footer_h = 50
-    footer_y = HEIGHT - footer_h
-    caption_area_top = footer_y - caption_h
-    img_area_h = caption_area_top - 20  # image area height
-
-    # Fetch and process the cartoon image
-    try:
-        img_url = data["image_url"]
-        r = requests.get(img_url, timeout=15,
-                         headers={"User-Agent": "JoanDashboard/1.0"})
-        r.raise_for_status()
-        cartoon = Image.open(BytesIO(r.content)).convert("L")
-
-        # Auto-crop whitespace
-        bg = cartoon.getpixel((0, 0))
-        threshold = 20
-        pixels = cartoon.load()
-        w, h = cartoon.size
-        top, bottom, left, right = h, 0, w, 0
-        for y_px in range(h):
-            for x_px in range(w):
-                if abs(pixels[x_px, y_px] - bg) > threshold:
-                    top = min(top, y_px)
-                    bottom = max(bottom, y_px)
-                    left = min(left, x_px)
-                    right = max(right, x_px)
-        if bottom > top and right > left:
-            margin = 10
-            cartoon = cartoon.crop((max(0, left - margin), max(0, top - margin),
-                                    min(w, right + margin), min(h, bottom + margin)))
-
-        # Scale to fit the available area
-        cw, ch = cartoon.size
-        scale = min((WIDTH - PAD * 2) / cw, img_area_h / ch)
-        new_w, new_h = int(cw * scale), int(ch * scale)
-        cartoon = cartoon.resize((new_w, new_h), Image.LANCZOS)
-
-        # Center the cartoon
-        x_off = (WIDTH - new_w) // 2
-        y_off = max(10, (img_area_h - new_h) // 2)
-        img.paste(cartoon, (x_off, y_off))
-    except Exception as e:
-        _centered_text(draw, HEIGHT // 3, f"Image load failed: {str(e)[:60]}", 28, fill=100)
-
-    # Draw caption
-    if caption_lines:
-        cap_font = get_font(36)
-        cy = caption_area_top + 15
-        for ln in caption_lines:
-            draw.text((WIDTH // 2, cy), ln, fill=30, font=cap_font, anchor="mt")
-            cy += 48
-
-    # Footer
-    draw.rectangle([0, footer_y, WIDTH, HEIGHT], fill=200)
-    draw.text((PAD + 10, footer_y + footer_h // 2), "The New Yorker — Daily Cartoon",
-              fill=60, font=get_font(24, bold=True), anchor="lm")
-    draw.text((WIDTH - PAD - 10, footer_y + footer_h // 2), now_str(),
-              fill=80, font=get_font(24), anchor="rm")
-
-    return img
+def render_daily_cartoon():
+    data = _require(_cache_fetch("newyorker_cartoon", 43200, 172800, _fetch_daily_cartoon))
+    cartoon = _require(_image_url(data['image_url']))
+    # Keep the cartoon and its original lettering intact.
+    from PIL import ImageChops
+    # Crop only outer whitespace; the original caption is already in the image.
+    mask = ImageChops.difference(cartoon, Image.new('L', cartoon.size, 255)).point(lambda v: 255 if v > 45 else 0)
+    bounds = mask.getbbox()
+    if bounds:
+        cartoon = cartoon.crop(bounds)
+    return _picture(cartoon)

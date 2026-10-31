@@ -42,35 +42,4 @@ def render_maths_challenge() -> Image.Image:
 
     random.shuffle(problems)
 
-    # Draw problems in two centered columns
-    col_left = 120
-    col_right = 840
-    col_text_w = 560
-    content_top = 180
-    content_bottom = HEIGHT - 160
-    row_h = 130
-    grid_h = 4 * row_h
-    start_y = content_top + max(0, ((content_bottom - content_top) - grid_h) // 2)
-    problem_font = _fit_font_to_width("999 × 999 = ?", col_text_w, 80, min_size=64)
-
-    for row in range(4):
-        for col in range(2):
-            i = row * 2 + col
-            problem = problems[i]
-            area_x = col_left if col == 0 else col_right
-            y = start_y + row * row_h
-
-            # Problem text
-            draw.text((area_x, y), _truncate_text(problem_font, problem, col_text_w),
-                      fill=20, font=problem_font, anchor="lm")
-
-    # Footer encouragement
-    encouragements = [
-        "Can you solve them all?", "No calculators allowed!",
-        "Show your working!", "Time yourself!",
-        "Beat yesterday's time!", "You've got this!",
-    ]
-    draw.text((WIDTH // 2, HEIGHT - 100), random.choice(encouragements), fill=140, font=get_font(30), anchor="mm")
-
-    _footer(draw, now_str())
-    return img
+    return _statement(problems[0], "What is the answer?", size=155)

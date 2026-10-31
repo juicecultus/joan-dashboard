@@ -27,3 +27,6 @@ logs/
 *.swp
 *.swo
 .DS_Store
+
+# Local screen audits (may contain personal calendar/tasks/photos)
+portrait-previews/

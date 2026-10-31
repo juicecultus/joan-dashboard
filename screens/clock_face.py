@@ -9,7 +9,7 @@ def render_clock_face() -> Image.Image:
     now = datetime.now()
 
     cx, cy = WIDTH // 2, HEIGHT // 2 - 30
-    radius = 480  # large clock filling the display
+    radius = min(WIDTH, HEIGHT) // 2 - 70  # large clock filling the display
 
     # Outer ring
     draw.ellipse([cx - radius - 8, cy - radius - 8, cx + radius + 8, cy + radius + 8], outline=30, width=6)
@@ -87,24 +87,9 @@ def render_clock_face() -> Image.Image:
     ]
     draw.polygon(points, fill=30)
 
-    # Second hand — thin and long
-    sec_len = radius * 0.85
-    sx = cx + int(sec_len * math.cos(sec_angle))
-    sy = cy + int(sec_len * math.sin(sec_angle))
-    # Counterweight
-    tail_len = radius * 0.15
-    tx = cx - int(tail_len * math.cos(sec_angle))
-    ty = cy - int(tail_len * math.sin(sec_angle))
-    draw.line([(tx, ty), (sx, sy)], fill=60, width=2)
-
     # Center cap
     draw.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=20)
     draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=60)
 
-    # Branding
-    draw.text((cx, cy + radius * 0.3), "JOAN", fill=160, font=get_font(22, bold=True), anchor="mm")
-
-    # Digital time below clock
-    draw.text((WIDTH // 2, HEIGHT - 50), now.strftime("%H:%M:%S"), fill=140, font=get_font(30), anchor="mm")
-
+    _fit_block(draw, now.strftime("%H:%M"), (80, 1330, WIDTH-160, 180), 140, True)
     return img

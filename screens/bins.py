@@ -41,31 +41,97 @@ def _bin_decrypt(hex_str: str) -> dict:
     return json.loads(plain.decode("utf-8"))
 
 
+# Form-engine protocol adapted from UKBinCollectionData's Buckinghamshire adapter.
+# See docs/third-party/UKBinCollectionData-LICENSE.txt (MIT).
+_BIN_BASE = "https://itouchvision.app/portal/itouchvision/gdsv5/"
+_BIN_ACCESS = "FA353FC740600CCE617BE0534D090A8C09AD3DCC"
+_BIN_BEARER = "SOcNAeuNQh/A6lmc6dd69Q=="  # Public form client value, not a user credential.
+
+
+def _parse_collection_table(markup, today=None):
+    from html.parser import HTMLParser
+    class Table(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows, self.row, self.cell = [], [], None
+        def handle_starttag(self, tag, attrs):
+            if tag == 'tr': self.row = []
+            if tag == 'td': self.cell = []
+            if tag == 'br' and self.cell is not None: self.cell.append(' ')
+        def handle_data(self, data):
+            if self.cell is not None: self.cell.append(data)
+        def handle_endtag(self, tag):
+            if tag == 'td' and self.cell is not None:
+                self.row.append(' '.join(''.join(self.cell).split()))
+                self.cell = None
+            if tag == 'tr' and self.row: self.rows.append(self.row)
+    parser = Table()
+    parser.feed(markup)
+    today = today or datetime.now().date()
+    result = []
+    for cells in parser.rows:
+        if len(cells) < 2: continue
+        raw, name = cells[:2]
+        match = re.search(r"(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?", raw)
+        if not match: continue
+        # The council omits the year. Restrict inferred dates to the next 90 days,
+        # preventing an old collection from silently becoming next year's date.
+        years = [int(match[3])] if match[3] else [today.year, today.year+1]
+        for year in years:
+            try:
+                date = datetime.strptime(f"{match[1]} {match[2]} {year}", "%d %B %Y").date()
+            except ValueError:
+                continue
+            delta = (date-today).days
+            if 0 <= delta <= 90:
+                result.append({'binType': name, 'collectionDay': date.isoformat()})
+                break
+    return _require(result, 'Council returned no upcoming collection dates')
+
+
 def _fetch_bins():
-    """Fetch bin collection dates from Buckinghamshire Council API."""
-    if not BIN_UPRN:
-        return None
-    payload = json.dumps({
-        "P_CLIENT_ID": 152,
-        "P_COUNCIL_ID": 34505,
-        "P_LANG_CODE": "EN",
-        "P_UPRN": BIN_UPRN,
-    })
-    encrypted = _bin_encrypt(payload)
-    headers = {
-        "P_PARAMETER": encrypted,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-    r = requests.get(
-        "https://itouchvision.app/portal/itouchvision/kmbd/collectionDay",
-        headers=headers, timeout=15,
-    )
-    r.raise_for_status()
-    raw = r.text.strip()
-    if not all(c in "0123456789ABCDEFabcdef" for c in raw):
-        raise ValueError(f"Non-hex response: {raw[:100]}")
-    decoded = _bin_decrypt(raw)
-    return decoded.get("collectionDay", [])
+    """Read the replacement council form; the retired kmbd feed returns null."""
+    import secrets
+    _require(BIN_UPRN, 'Bin address not configured')
+    with requests.Session() as session:
+        session.headers.update({'Accept':'application/json',
+            'Content-Type':'application/json; charset=UTF-8',
+            'Origin':'https://connect.buckinghamshire.gov.uk',
+            'sessionid':secrets.token_hex(16), 'User-Agent':'Mozilla/5.0'})
+        common = {'P_CLIENT_ID':152, 'P_ACCESS_KEY':_BIN_ACCESS, 'LANG_CODE':'EN'}
+        def plugin(name, payload):
+            response = session.get(_BIN_BASE+'plugin/'+name,
+                headers={'authorization':'Bearer '+_BIN_BEARER,
+                         'P_PARAMETER':_bin_encrypt(json.dumps(payload))}, timeout=12)
+            response.raise_for_status()
+            return _bin_decrypt(response.text.strip())
+        fields = [
+            {'ANSWER':{'ID':''}, 'QUESTION':{'VALUE':'honeypot'}},
+            {'ANSWER':{'ID':'','VALUE':{'LOCATION_DATA':{'REPORT_UPRN':int(BIN_UPRN)}}},
+             'QUESTION':{'ID':'666224','VALUE':' Your address'}},
+            {'ANSWER':{'ID':'','VALUE':"UPRN='#REPORT_UPRN#'"},
+             'QUESTION':{'ID':'666227','VALUE':'-Hidden- Selected UPRN'}},
+        ]
+        payload = dict(common, P_APP_ID=0, P_REPORT_ID=None, P_USER_ID=None,
+            P_CATEGORY_ID=18428, P_COUNCIL_ID=34505, P_FORM_ID=2299,
+            P_ALLOW_START_PAGE=0, P_SKIPPED_PAGE_ID='', P_PAGE_ID=52742,
+            P_REPORT_DATA={'REPORT_DATA':fields})
+        response = session.post(_BIN_BASE+'service/saveqadata',
+            data=_bin_encrypt(json.dumps(payload)), timeout=12)
+        response.raise_for_status()
+        report = _require(_bin_decrypt(response.text.strip()).get('P_REPORT_ID'), 'Council lookup session unavailable')
+        form = plugin('getformdata', dict(common, P_CATEGORY_ID=18428, P_REPORT_ID=report, P_USER_ID=None))
+        items = [item for page in form.get('PAGES',[]) for region in page.get('REGIONS',[])
+                 for item in region.get('ITEMS',[]) if item.get('I_TYPE') == 'WEB_SERVICE_REF']
+        item = _require(items, 'Council collection form changed')[0]
+        params = dict(common, P_ITEM_ID=item['I_ID'], P_WS_ID=item['I_WS_ID'], P_REPORT_ID=report)
+        mapping = plugin('getWSRInputMapping', dict(params, P_USER_ID=None))
+        inputs = {i['name']:i['inSource'] for i in mapping.get('WS_INPUTS',[])
+                  if i.get('name') and i.get('inSource') is not None}
+        result = plugin('getWSRResult', dict(params, P_INPUT_DATA=inputs or {'uprn':str(BIN_UPRN)}))
+        outputs = result.get('WSR_VALUE',{}).get('OUTPUT_DATA',[])
+        markup = '\n'.join(o.get('VAL','') for o in outputs)
+        return _parse_collection_table(markup)
 
 
 def _draw_bin_icon(draw, cx, cy, size, fill, label_char):
@@ -97,22 +163,7 @@ def render_bins() -> Image.Image:
     # Fetch collection data (cached 4 hours, stale up to 24h)
     collections = _cache_fetch("bins", 14400, 86400, _fetch_bins)
 
-    # --- Header ---
-    header_h = 100
-    draw.rectangle([0, 0, WIDTH, header_h], fill=30)
-    draw.text((PAD, header_h // 2), "Bin Collection Day",
-              fill=240, font=get_font(48, bold=True), anchor="lm")
-    draw.text((WIDTH - PAD, header_h // 2), "Waddesdon",
-              fill=180, font=get_font(30), anchor="rm")
-
-    if not collections or not BIN_UPRN:
-        if not BIN_UPRN:
-            msg = "BIN_UPRN not set -- add your UPRN to .env"
-        else:
-            msg = "No collection data available"
-        _centered_text(draw, HEIGHT // 2 - 20, msg, 36, fill=100)
-        _dashboard_footer(draw)
-        return img
+    _require(collections)
 
     # Parse and sort by date
     today = datetime.now().date()
@@ -133,7 +184,8 @@ def render_bins() -> Image.Image:
                 continue
         except (ValueError, IndexError):
             continue
-        bins.append({"type": bin_type, "date": dt})
+        if dt >= today:
+            bins.append({"type": bin_type, "date": dt})
 
     bins.sort(key=lambda b: b["date"])
 
@@ -143,104 +195,19 @@ def render_bins() -> Image.Image:
     for b in bins:
         by_date.setdefault(b["date"], []).append(b["type"])
 
-    if not by_date:
-        _centered_text(draw, HEIGHT // 2, "No upcoming collections found", 38, fill=100)
-        _dashboard_footer(draw)
-        return img
-
-    # --- Render the next collection prominently ---
-    next_date = list(by_date.keys())[0]
-    next_bins = by_date[next_date]
-    days_until = (next_date - today).days
-
-    if days_until == 0:
-        urgency = "TODAY"
-        urgency_fill = 0
-    elif days_until == 1:
-        urgency = "TOMORROW"
-        urgency_fill = 40
-    elif days_until < 0:
-        urgency = f"{abs(days_until)} day{'s' if abs(days_until) != 1 else ''} ago"
-        urgency_fill = 120
-    else:
-        urgency = f"In {days_until} days"
-        urgency_fill = 80
-
-    # Big urgency text
-    y = header_h + 50
-    draw.text((WIDTH // 2, y), urgency, fill=urgency_fill,
-              font=get_font(72, bold=True), anchor="mt")
-    y += 90
-
-    # Date line
-    date_display = next_date.strftime("%A, %-d %B %Y")
-    draw.text((WIDTH // 2, y), date_display, fill=60,
-              font=get_font(38), anchor="mt")
-    y += 70
-
-    # --- Draw bin icons for next collection ---
-    bin_count = len(next_bins)
-    icon_size = min(140, (WIDTH - PAD * 2) // max(bin_count, 1) - 60)
-    total_width = bin_count * (icon_size + 80) - 80
-    start_x = (WIDTH - total_width) // 2 + icon_size // 2
-
-    for i, bt in enumerate(next_bins):
-        cx = start_x + i * (icon_size + 80)
-        cy = y + icon_size // 2 + 20
-
-        # Match style
-        key = bt.lower()
-        style = None
-        for k, v in _BIN_STYLES.items():
-            if k in key:
-                style = v
-                break
-        if not style:
-            style = (bt, 90)
-        name, fill = style
-        label = name[0].upper()
-
-        _draw_bin_icon(draw, cx, cy, icon_size, fill, label)
-        # Label below icon
-        name_font = get_font(24, bold=True)
-        draw.text((cx, cy + icon_size // 2 + 40), _truncate_text(name_font, name, icon_size + 30),
-                  fill=40, font=name_font, anchor="mt")
-
-    y = cy + icon_size // 2 + 80
-
-    # --- Subsequent collections ---
-    remaining = list(by_date.items())[1:4]  # next 3 after the first
-    if remaining:
-        y += 20
-        draw.line([(PAD + 40, y), (WIDTH - PAD - 40, y)], fill=200, width=1)
-        y += 30
-        draw.text((PAD + 40, y), "Coming up", fill=100,
-                  font=get_font(28, bold=True), anchor="lt")
-        y += 45
-
-        row_font = get_font(30)
-        row_font_bold = get_font(30, bold=True)
-        for dt, bin_types in remaining:
-            days = (dt - today).days
-            if days == 0:
-                day_label = "Today"
-            elif days == 1:
-                day_label = "Tomorrow"
-            else:
-                day_label = dt.strftime("%a %-d %b")
-
-            types_str = ", ".join(bin_types)
-            draw.text((PAD + 60, y), day_label, fill=40, font=row_font_bold, anchor="lt")
-            types_max = WIDTH - 450 - PAD - 90
-            draw.text((450, y), _truncate_text(row_font, types_str, types_max), fill=80, font=row_font, anchor="lt")
-
-            if days >= 0:
-                tag = f"{days}d"
-                draw.text((WIDTH - PAD - 40, y), tag, fill=140, font=row_font, anchor="rt")
-
-            y += 50
-
-    # --- Footer ---
-    _dashboard_footer(draw)
-
+    _require(list(by_date))
+    next_date = next(iter(by_date))
+    types = by_date[next_date]
+    days = (next_date-today).days
+    urgency = 'Today' if days == 0 else 'Tomorrow' if days == 1 else f'In {days} days'
+    img, draw = _canvas()
+    _fit_block(draw, urgency, (80,80,WIDTH-160,250), 160, True)
+    # One collection day; all bins due on that day remain visible.
+    count = len(types)
+    size = min(240, (WIDTH-160)//count-30)
+    for i, name in enumerate(types):
+        x = 80 + (i+.5)*(WIDTH-160)/count
+        _draw_bin_icon(draw, int(x), 680, size, 0, name[:1].upper())
+    _fit_block(draw, ' + '.join(types), (80,980,WIDTH-160,300), 105, True)
+    _fit_block(draw, next_date.strftime('%A %d %B'), (80,1390,WIDTH-160,130), 64)
     return img

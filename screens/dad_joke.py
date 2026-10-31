@@ -35,26 +35,4 @@ def render_dad_joke() -> Image.Image:
     joke = result or "I told my wife she was drawing her eyebrows too high. She looked surprised."
     joke = _strip_emoji(joke)
 
-    # Title
-    draw.text((WIDTH // 2, 120), "Dad Joke", fill=160, font=get_font(48), anchor="mm")
-
-    # Draw a small divider
-    div_w = 200
-    draw.line([(WIDTH // 2 - div_w // 2, 160), (WIDTH // 2 + div_w // 2, 160)], fill=180, width=2)
-
-    # Joke text — larger and vertically centered
-    joke_font = get_font(78)
-    lines = _wrap_text(joke_font, joke, WIDTH - 200)
-    line_h = max(int(_text_height(joke_font, "Ag") * 1.25), 96)
-    block_h = line_h * len(lines)
-    start_y = max(240, (HEIGHT - block_h) // 2 - 40)
-    y = start_y
-    for ln in lines:
-        draw.text((WIDTH // 2, y), ln, fill=20, font=joke_font, anchor="mt")
-        y += line_h
-
-    # Typographic flourish (monochrome-safe — bullet U+2022 is in every font)
-    draw.text((WIDTH // 2, HEIGHT - 100), "•  •  •", fill=160, font=get_font(48), anchor="mm")
-
-    _footer(draw, now_str())
-    return img
+    return _statement(joke)

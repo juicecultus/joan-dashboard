@@ -61,6 +61,8 @@ def _fetch_torah_verse():
         return text.strip()
 
     en_text = _clean_sefaria_text(texts[vidx])
+    # Psalms sometimes prefixes the English translation with its Hebrew acrostic letter.
+    en_text = re.sub(r"^[\u05d0-\u05ea]\s+(?=[A-Za-z])", "", en_text)
     he_text = _clean_sefaria_text(he_texts[vidx]) if vidx < len(he_texts) else ""
     verse_ref = f"{ref_base.rsplit('.', 1)[0] if '.' in ref_base else ref_base}:{vidx + 1}"
 
@@ -74,57 +76,9 @@ def render_torah_wisdom() -> Image.Image:
 
     verse = _cache_fetch("torah_wisdom", 43200, 172800, _fetch_torah_verse)
 
-    if not verse:
-        _centered_text(draw, HEIGHT // 2, "No verse available", 40, fill=80)
-        _footer(draw, now_str())
-        return img
-
-    en_text = verse.get("en", "")
-    he_text = verse.get("he", "")
-    ref_str = verse.get("ref", "")
-
-    # Header
-    draw.text((WIDTH // 2, 80), "Daily Torah Wisdom", fill=120, font=get_font(32), anchor="mt")
-    draw.line([(PAD, 130), (WIDTH - PAD, 130)], fill=200, width=1)
-
-    # Reference — large (like the 'Word' in Word of Day)
-    ref_font = _fit_font_to_width(ref_str, WIDTH - 200, 100, min_size=56, bold=True)
-    draw.text((WIDTH // 2, 220), _truncate_text(ref_font, ref_str, WIDTH - 200),
-              fill=0, font=ref_font, anchor="mt")
-
-    # Divider line for content
-    y = 360
-    draw.line([(PAD + 100, y), (WIDTH - PAD - 100, y)], fill=200, width=1)
-    y += 40
-
-    # Content: English + Hebrew centered vertically in remaining space
-    en_font = get_font(52, bold=True)
-    he_font = _get_hebrew_font(56)
-    
-    max_w = WIDTH - 240
-    en_lines = _wrap_text(en_font, en_text, max_w) if en_text else []
-    he_lines = _wrap_text(he_font, he_text, max_w, rtl=True) if he_text else []
-
-    en_h = int(52 * 1.3) * len(en_lines)
-    he_h = int(56 * 1.3) * len(he_lines)
-    gap = 60 if en_lines and he_lines else 0
-    total_h = en_h + gap + he_h
-
-    content_top = y
-    content_bottom = HEIGHT - 120
-    y = content_top + max(0, (content_bottom - content_top - total_h) // 2)
-
-    # Draw English
-    for ln in en_lines:
-        draw.text((WIDTH // 2, y), ln, fill=30, font=en_font, anchor="mt")
-        y += int(52 * 1.3)
-
-    # Draw Hebrew (raqm shapes niqqud/cantillation when available)
-    if he_lines:
-        y += gap
-        for ln in he_lines:
-            _draw_text_intl(draw, (WIDTH // 2, y), ln, font=he_font, fill=60, anchor="mt", rtl=True)
-            y += int(56 * 1.3)
-
-    _footer(draw, now_str())
+    _require(verse)
+    img, draw = _canvas()
+    _fit_block(draw, verse.get('he',''), (80,80,WIDTH-160,650), 110)
+    _fit_block(draw, verse.get('en',''), (80,790,WIDTH-160,510), 90)
+    _fit_block(draw, verse.get('ref',''), (80,1390,WIDTH-160,130), 58)
     return img

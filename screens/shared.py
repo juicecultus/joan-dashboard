@@ -130,7 +130,12 @@ def _cache_fetch(key, ttl, max_stale, fetch_fn):
         return entry["data"]
     try:
         data = fetch_fn()
+        if data is None or data == [] or data == "":
+            raise ValueError("Empty response")
         _cache[key] = {"data": data, "ts": now}
+        while len(_cache) > 128:
+            oldest = min(_cache, key=lambda k: _cache[k]["ts"])
+            del _cache[oldest]
         return data
     except Exception as e:
         print(f"[cache] '{key}' fetch failed: {e}")
@@ -291,23 +296,12 @@ def _truncate_text(font, text: str, max_width: int) -> str:
 
 
 def _dashboard_footer(draw):
-    """Match the main dashboard footer: location + update time + room/battery."""
-    footer_left = f"{WEATHER_LOCATION}  ·  Updated {datetime.now().strftime('%H:%M')}"
-    draw.text((PAD, HEIGHT - 28), footer_left, fill=160, font=get_font(26), anchor="lm")
-    dev = fetch_device_status()
-    footer_parts = []
-    if dev.get("temperature"):
-        footer_parts.append(f"Room {dev['temperature']}°C")
-    if dev.get("battery"):
-        footer_parts.append(f"Batt {dev['battery']}%")
-    if footer_parts:
-        draw.text((WIDTH - PAD, HEIGHT - 28), "  ·  ".join(footer_parts), fill=160, font=get_font(26), anchor="rm")
+    """Display chrome intentionally omitted on the room display."""
+    pass
 
 
 def _footer(draw, text=""):
-    """Legacy footer wrapper; now matches dashboard footer style."""
-    _dashboard_footer(draw)
-
+    pass
 
 
 def now_str():
@@ -338,6 +332,104 @@ def _draw_bullet(draw, x, y, size, fill=0):
     """Draw a simple circular bullet centered at (x, y)."""
     r = size // 2
     draw.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+
+class ScreenUnavailable(RuntimeError):
+    """No useful content: skip this playlist slot instead of publishing an error."""
+
+
+def _require(data, message="Content unavailable"):
+    if data is None or data == [] or data == "":
+        raise ScreenUnavailable(message)
+    return data
+
+
+def _canvas():
+    img = Image.new("L", (WIDTH, HEIGHT), 255)
+    return img, ImageDraw.Draw(img)
+
+
+def _fit_block(draw, text, box, size=120, bold=False, font_fn=None):
+    """Fit complete text to a rectangle, including long tokens and CJK."""
+    text = str(text or "")
+    if not text:
+        return
+    x, y, w, h = box
+    if x < 0 or y < 0 or x+w > WIDTH or y+h > HEIGHT:
+        raise ValueError(f"Text region outside canvas: {box}")
+    rtl = _is_rtl_text(text)
+    factory = font_fn or (_get_hebrew_font if rtl else lambda n: get_font(n, bold))
+    for n in range(size, 27, -2):
+        font = factory(n)
+        # Preserve ordinary words (especially spelling cards); shrink before wrapping.
+        if any(len(word) <= 40 and _measure_text_intl(font, word, rtl) > w for word in text.split()):
+            continue
+        lines = []
+        for para in text.split("\n"):
+            line = ""
+            for word in para.split():
+                candidate = (line + " " + word).strip()
+                if _measure_text_intl(font, candidate, rtl) <= w:
+                    line = candidate
+                    continue
+                if line:
+                    lines.append(line)
+                line = ""
+                for char in word:
+                    if line and _measure_text_intl(font, line + char, rtl) > w:
+                        lines.append(line)
+                        line = ""
+                    line += char
+            lines.append(line)
+        line_h = int(n * 1.3)
+        if len(lines) * line_h <= h:
+            break
+    else:
+        raise ScreenUnavailable("Text too long for the display")
+    top = y + (h - len(lines) * line_h) // 2
+    for line in lines:
+        if rtl:
+            line = _shape_rtl_text(line)
+        _draw_text_intl(draw, (x + w // 2, top), line, font=font, fill=0, anchor="mt", rtl=rtl)
+        top += line_h
+
+
+def _statement(text, detail="", size=140):
+    img, draw = _canvas()
+    _fit_block(draw, text, (80, 160, WIDTH-160, 980 if detail else 1280), size, True)
+    if detail:
+        _fit_block(draw, detail, (90, 1210, WIDTH-180, 240), 64)
+    return img
+
+
+def _select(items, seconds=1800):
+    return _require(items)[int(time.time() // seconds) % len(items)]
+
+
+def _image_url(url):
+    from PIL import ImageOps
+    def fetch():
+        r = requests.get(url, timeout=12, headers={"User-Agent": "JoanDashboard/2.0"})
+        r.raise_for_status()
+        source = ImageOps.exif_transpose(Image.open(BytesIO(r.content))).convert("RGBA")
+        bg = Image.new("RGBA", source.size, "white")
+        bg.alpha_composite(source)
+        return ImageOps.autocontrast(bg.convert("L"), cutoff=1)
+    return _cache_fetch("image:" + url, 3600, 86400, fetch)
+
+
+def _picture(image, caption="", portrait=False):
+    from PIL import ImageOps
+    _require(image)
+    img, draw = _canvas()
+    area = (40, 40, WIDTH-80, HEIGHT-(390 if caption else 80))
+    text_area = (80, HEIGHT-320, WIDTH-160, 260)
+    x, y, w, h = area
+    fitted = ImageOps.contain(image.convert("L"), (w, h), Image.Resampling.LANCZOS)
+    img.paste(fitted, (x+(w-fitted.width)//2, y+(h-fitted.height)//2))
+    if caption:
+        _fit_block(draw, caption, text_area, 100 if portrait else 66, True)
+    return img
 
 
 __all__ = [

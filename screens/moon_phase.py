@@ -27,14 +27,7 @@ def _draw_moon(draw, cx, cy, radius, phase_days):
     phase_pct = phase_days / 29.530588853  # 0 to 1
 
     # Draw the dark circle (base)
-    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=40)
-
-    # Calculate illumination
-    # 0 = new (dark), 0.5 = full (bright), 1 = new again
-    if phase_pct <= 0.5:
-        illumination = phase_pct * 2  # 0 to 1 (waxing)
-    else:
-        illumination = (1 - phase_pct) * 2  # 1 to 0 (waning)
+    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=0)
 
     # Draw lit portion using vertical slices
     for y_off in range(-radius, radius + 1):
@@ -44,7 +37,7 @@ def _draw_moon(draw, cx, cy, radius, phase_days):
             continue
 
         # Terminator x position
-        term_x = x_half * (2 * illumination - 1)
+        term_x = x_half * math.cos(2 * math.pi * phase_pct)
 
         if phase_pct <= 0.5:
             # Waxing: lit from right
@@ -53,10 +46,10 @@ def _draw_moon(draw, cx, cy, radius, phase_days):
         else:
             # Waning: lit from left
             x_start = int(cx - x_half)
-            x_end = int(cx + term_x)
+            x_end = int(cx - term_x)
 
         if x_end > x_start:
-            draw.line([(x_start, cy + y_off), (x_end, cy + y_off)], fill=230, width=1)
+            draw.line([(x_start, cy + y_off), (x_end, cy + y_off)], fill=255, width=1)
 
 
 def render_moon_phase() -> Image.Image:
@@ -88,43 +81,9 @@ def render_moon_phase() -> Image.Image:
     else:
         name = "New Moon"
 
-    illumination = abs(1 - 2 * phase_pct) if phase_pct > 0.5 else phase_pct * 2
-
-    # Draw the moon — large and centered
-    moon_r = 250
-    moon_cy = 420
-    _draw_moon(draw, WIDTH // 2, moon_cy, moon_r, phase_days)
-
-    # Add subtle crater circles for realism
-    craters = [(0.15, -0.3, 30), (-0.25, 0.1, 20), (0.1, 0.2, 25),
-               (-0.15, -0.15, 15), (0.3, 0.05, 18), (-0.05, 0.35, 22)]
-    for cx_f, cy_f, cr in craters:
-        ccx = int(WIDTH // 2 + cx_f * moon_r)
-        ccy = int(moon_cy + cy_f * moon_r)
-        # Only draw craters on lit portion
-        dist = math.sqrt(cx_f**2 + cy_f**2)
-        if dist < 0.85:
-            draw.ellipse([ccx - cr, ccy - cr, ccx + cr, ccy + cr], outline=200, width=1)
-
-    # Title
-    draw.text((WIDTH // 2, 80), "Moon Phase", fill=160, font=get_font(32), anchor="mm")
-
-    # Phase name — large
-    draw.text((WIDTH // 2, 760), name, fill=0, font=get_font(56, bold=True), anchor="mm")
-
-    # Illumination percentage
-    draw.text((WIDTH // 2, 830), f"{illumination * 100:.0f}% illuminated", fill=100, font=get_font(32), anchor="mm")
-
-    # Day in cycle
-    draw.text((WIDTH // 2, 880), f"Day {phase_days:.1f} of 29.5", fill=140, font=get_font(26), anchor="mm")
-
-    # Next full/new moon
-    if phase_days < 14.765:
-        days_to_full = 14.765 - phase_days
-        draw.text((WIDTH // 2, 940), f"Full moon in {days_to_full:.0f} days", fill=120, font=get_font(28), anchor="mm")
-    else:
-        days_to_new = 29.53 - phase_days
-        draw.text((WIDTH // 2, 940), f"New moon in {days_to_new:.0f} days", fill=120, font=get_font(28), anchor="mm")
-
-    _footer(draw, now.strftime("%A %d %B"))
+    illumination = (1-math.cos(2*math.pi*phase_pct))/2
+    _draw_moon(draw, WIDTH//2, 650, 480, phase_days)
+    draw.ellipse((WIDTH//2-480,170,WIDTH//2+480,1130), outline=0, width=5)
+    _fit_block(draw, name, (80,1190,WIDTH-160,180), 110, True)
+    _fit_block(draw, f"{illumination*100:.0f}% illuminated", (80,1410,WIDTH-160,100), 64)
     return img

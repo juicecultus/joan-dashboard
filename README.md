@@ -1,5 +1,8 @@
 # Joan Dashboard
 
+
+**Current display design:** portrait 1200 × 1600, mounted 90° to the right, with one large subject per screen and no generic headers or footers. See [portrait setup, feed repairs and Immich integration](docs/portrait-display.md). The `dashboard` entry now shows current weather; calendar and tasks have their own screens.
+
 A custom dashboard and **playlist rotation system** for **Joan e-ink displays** (13", 6", and any Visionect-compatible size) — weather, calendar, tasks, art, quotes, and more, rendered as grayscale images and pushed via the [Visionect Software Suite (VSS)](https://docs.visionect.com/).
 
 ![Dashboard Preview](docs/preview.png)
