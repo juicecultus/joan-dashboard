@@ -75,5 +75,6 @@ def render_chinese_proverb() -> Image.Image:
     img, draw = _canvas()
     # Allow CJK characters to wrap into a large calligraphic block.
     _poster_text(draw, ' '.join(chinese), (50,40,WIDTH-100,830), 350, font_fn=_get_cjk_font)
+    draw.line((440,905,760,905),fill=0,width=3)
     _poster_text(draw, english, (50,940,WIDTH-100,610), 230, False)
     return img

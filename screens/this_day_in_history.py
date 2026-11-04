@@ -22,6 +22,7 @@ def render_this_day_in_history() -> Image.Image:
     event = _select(events, 3600)
     img, draw = _canvas()
     _poster_text(draw, event['year'], (40,40,WIDTH-80,340), 420)
-    _poster_text(draw, event['text'], (50,430,WIDTH-100,1000), 240)
+    _panel(draw,(25,410,1150,1165))
+    _poster_text(draw, event['text'], (75,460,WIDTH-150,930), 190, False)
     _poster_text(draw, now.strftime("On %-d %B"), (50,1480,WIDTH-100,80), 85, False)
     return img

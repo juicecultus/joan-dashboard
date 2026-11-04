@@ -21,7 +21,7 @@ def render_element_of_day() -> Image.Image:
 
     el = _require(elements)[datetime.now().timetuple().tm_yday % len(elements)]
     img, draw = _canvas()
-    draw.rectangle((50,50,1150,1550), outline=0, width=8)
+    draw.rectangle((50,50,1150,1550), outline=0, width=4)
     _fit_block(draw, el.get('atomic_number',''), (100,100,260,220), 140, True)
     _fit_block(draw, el.get('atomic_mass',''), (650,100,450,220), 86)
     _poster_text(draw, el['symbol'], (80,360,1040,800), 1100)

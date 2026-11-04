@@ -132,16 +132,28 @@ def render_trains():
         services = [s for s in services if any(d.get('crs') == TRAINS_DESTINATION for d in _locations(s.get('destination')))]
     if not services:
         return _statement('No departures', _CRS_NAMES.get(TRAINS_STATION,TRAINS_STATION) + ' to ' + _CRS_NAMES.get(TRAINS_DESTINATION,TRAINS_DESTINATION))
-    service = services[0]
-    destinations = _locations(service.get('destination'))
-    destination = destinations[0].get('locationName','') if destinations else ''
-    status = 'Cancelled' if str(service.get('isCancelled','')).lower() == 'true' else service.get('etd','')
     img, draw = _canvas()
-    _poster_text(draw, service.get('std',''), (40,40,1120,370), 470)
-    _poster_text(draw, destination, (40,470,1120,400), 300)
-    _poster_text(draw, status, (40,920,1120,180), 220)
-    platform = service.get('platform')
-    _poster_text(draw, 'Platform' if platform else 'Platform pending', (40,1180,1120,100), 110,False)
-    if platform:
-        _poster_text(draw,str(platform),(40,1330,1120,230),320)
+    station = board.get('locationName') or _CRS_NAMES.get(TRAINS_STATION,TRAINS_STATION)
+    _poster_text(draw,station,(55,35,1090,150),110)
+    _poster_text(draw,'Departs',(65,215,285,55),52,False)
+    _poster_text(draw,'Destination / status',(380,215,550,55),52,False)
+    _poster_text(draw,'Plat.',(995,215,150,55),52,False)
+    shown = services[:5]
+    row_step = min(420,1260//len(shown))
+    row_height = row_step-25
+    for i,service in enumerate(shown):
+        y=300+i*row_step
+        _panel(draw,(30,y,1140,row_height),24)
+        _poster_text(draw,service.get('std') or '—',(65,y+row_height//4,280,row_height//2),150)
+        destinations = _locations(service.get('destination'))
+        destination = ' / '.join(d.get('locationName') or _CRS_NAMES.get(d.get('crs'),d.get('crs','')) for d in destinations)
+        _poster_text(draw,destination or 'Destination pending',(385,y+30,555,int(row_height*.42)),90)
+        cancelled = str(service.get('isCancelled','')).lower() == 'true'
+        status = 'Cancelled' if cancelled else str(service.get('etd') or 'Time pending')
+        if len(status)==5 and status[2]==':':
+            status = 'Expected '+status
+        _poster_text(draw,status,(385,y+int(row_height*.65),555,65),60,False)
+        platform = '—' if cancelled else str(service.get('platform') or '—')
+        draw.line((975,y+35,975,y+row_height-35),fill=0,width=2)
+        _poster_text(draw,platform,(1000,y+row_height//3,140,row_height//3),130)
     return img

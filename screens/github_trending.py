@@ -37,6 +37,7 @@ def render_github_trending():
     draw.line([(400,620),(800,370),(800,170)],fill=0,width=30,joint='curve')
     for x,y in [(400,170),(400,760),(800,170)]:
         draw.ellipse((x-70,y-70,x+70,y+70),fill=255,outline=0,width=26)
+    _panel(draw,(25,900,1150,675))
     _poster_text(draw,name.replace('-', ' '),(40,930,1120,450),420)
     _poster_text(draw,owner+' / GitHub',(40,1470,1120,100),110,False)
     return img

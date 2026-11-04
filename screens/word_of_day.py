@@ -68,6 +68,6 @@ def render_word_of_day() -> Image.Image:
     _require(definition, "Dictionary definition unavailable")
     img, draw = _canvas()
     _poster_text(draw, word.capitalize(), (40,40,WIDTH-80,350), 420)
-    draw.rounded_rectangle((25,415,WIDTH-25,HEIGHT-25),radius=32,outline=0,width=4)
+    draw.rounded_rectangle((25,415,WIDTH-25,HEIGHT-25),radius=32,outline=0,width=3)
     _poster_text(draw, definition, (70,470,WIDTH-140,1060), 220, False)
     return img

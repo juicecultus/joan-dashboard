@@ -409,7 +409,7 @@ def _poster_text(draw, text, box, size=500, bold=True, font_fn=None):
 
 def _calendar_page(day, month, title, detail=''):
     img, draw = _canvas()
-    draw.rounded_rectangle((40,90,WIDTH-40,HEIGHT-40),radius=40,outline=0,width=14)
+    draw.rounded_rectangle((40,90,WIDTH-40,HEIGHT-40),radius=40,outline=0,width=8)
     for x in (270,WIDTH-270):
         draw.rounded_rectangle((x-20,30,x+20,155),radius=20,fill=0)
     _poster_text(draw,month,(80,190,WIDTH-160,140),160)
@@ -418,6 +418,19 @@ def _calendar_page(day, month, title, detail=''):
     if detail:
         _poster_text(draw,detail,(85,1410,WIDTH-170,90),90,False)
     return img
+
+
+def _panel(draw, box, radius=32):
+    """Consistent outline for a meaningful group of related information."""
+    x,y,w,h = box
+    draw.rounded_rectangle((x,y,x+w,y+h),radius=radius,outline=0,width=3)
+
+
+def _metric_panel(draw, label, value, box):
+    x,y,w,h = box
+    _panel(draw,box)
+    _poster_text(draw,label,(x+25,y+20,w-50,48),52,False)
+    _poster_text(draw,value,(x+25,y+85,w-50,h-105),115)
 
 
 def _editorial_font(size):
@@ -438,7 +451,7 @@ def _editorial_font(size):
 
 def _statement(text, detail="", size=140, editorial=False):
     img, draw = _canvas()
-    draw.rounded_rectangle((28,28,WIDTH-28,HEIGHT-28),radius=38,outline=0,width=5)
+    draw.rounded_rectangle((28,28,WIDTH-28,HEIGHT-28),radius=38,outline=0,width=3)
     _poster_text(draw, text, (75,80,WIDTH-150,1210 if detail else HEIGHT-160),
                  max(size,500),font_fn=_editorial_font if editorial else None)
     if detail:
@@ -476,7 +489,7 @@ def _picture(image, caption="", portrait=False, photo=True, credit="", editorial
     if caption:
         top = fitted.height+45
         bottom = HEIGHT-25
-        draw.rounded_rectangle((25,top,WIDTH-25,bottom),radius=28,outline=0,width=4)
+        draw.rounded_rectangle((25,top,WIDTH-25,bottom),radius=28,outline=0,width=3)
         title_top = top+35
         title_bottom = bottom-(165 if credit else 30)
         _poster_text(draw,caption,(65,title_top,WIDTH-130,title_bottom-title_top),

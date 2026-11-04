@@ -128,13 +128,32 @@ class DisplayTests(unittest.TestCase):
             {'id':'landscape','type':'IMAGE','width':300,'height':200,'visibility':'timeline'},
             {'id':'hidden','type':'IMAGE','width':200,'height':300,'visibility':'hidden'},
             {'id':'video','type':'VIDEO','width':200,'height':300,'visibility':'timeline'},
-            {'id':'portrait','type':'IMAGE','width':200,'height':300,'visibility':'timeline'}]
+            {'id':'portrait','type':'IMAGE','width':200,'height':300,'visibility':'timeline','exifInfo':{'make':'Canon','model':'Canon EOS R5'}}]
         preview=Mock(status_code=200,content=data.getvalue())
         with patch('screens.family_photo.IMMICH_API_KEY','test-key'), patch('screens.family_photo.requests.post',return_value=response), patch('screens.family_photo.requests.get',return_value=preview) as get:
             self.assertEqual(_immich_photo().size,(1200,1600))
             self.assertEqual(get.call_count,1)
             self.assertIn('/portrait/thumbnail',get.call_args.args[0])
             self.assertEqual(get.call_args.kwargs['params'],{'size':'preview'})
+
+    def test_only_canon_r5_photos_are_eligible(self):
+        from screens.family_photo import _is_r5_photo
+        for make,model,expected in [('Canon','Canon EOS R5',True),('Canon','EOS R5',True),
+                                    ('Canon','Canon EOS R5 Mark II',False),('Apple','iPhone',False),
+                                    ('Canon','Canon EOS R6',False),('', '',False)]:
+            self.assertEqual(_is_r5_photo({'exifInfo':{'make':make,'model':model}}),expected)
+        self.assertFalse(_is_r5_photo({}))
+
+    def test_weather_details_handle_missing_and_zero_values(self):
+        from screens.weather_glance import _weather_value, _today_rain, render_weather_glance
+        self.assertEqual(_weather_value(0,'%'),'0%')
+        self.assertEqual(_weather_value(None),'—')
+        self.assertEqual(_weather_value(float('nan')),'—')
+        data={'current':{'time':'2026-11-04T09:00','temperature_2m':9,'weather_code':3},
+              'daily':{'time':['2026-11-03','2026-11-04'],'precipitation_probability_max':[10,0]}}
+        self.assertEqual(_today_rain(data),0)
+        with patch('screens.weather_glance._cache_fetch',return_value=data):
+            self.assertEqual(render_weather_glance().size,(1200,1600))
 
     def test_council_dates_cross_year_without_reviving_old_dates(self):
         from screens.bins import _parse_collection_table
@@ -158,6 +177,23 @@ class DisplayTests(unittest.TestCase):
         data['daily']['temperature_2m_min'][1] = None
         self.assertIsNone(_daily_range(data))
         self.assertIsNone(_daily_range({}))
+
+    def test_departure_board_shows_multiple_services_and_statuses(self):
+        import screens.trains as trains
+        services=[{'std':f'{10+i}:10','destination':{'location':{'crs':'MYB','locationName':'London Marylebone'}},
+                   'etd':'On time','platform':str(i+1)} for i in range(6)]
+        services[1]['isCancelled']='true'
+        services[2]['etd']='12:25'
+        services[3].pop('platform')
+        with patch.object(trains,'_cache_fetch',return_value={'trainServices':{'service':services}}), patch.object(trains,'TRAINS_DESTINATION','MYB'), patch.object(trains,'_poster_text',wraps=shared._poster_text) as text:
+            self.assertEqual(trains.render_trains().size,(1200,1600))
+        labels=[call.args[1] for call in text.call_args_list]
+        for time in ['10:10','11:10','12:10','13:10','14:10']:
+            self.assertIn(time,labels)
+        self.assertNotIn('15:10',labels)
+        self.assertIn('Cancelled',labels)
+        self.assertIn('Expected 12:25',labels)
+        self.assertIn('—',labels)
 
     def test_soap_locations_and_cancellation(self):
         self.assertEqual(_locations({'location':{'crs':'MYB'}}),[{'crs':'MYB'}])

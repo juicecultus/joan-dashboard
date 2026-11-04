@@ -73,12 +73,9 @@ def render_stock_ticker() -> Image.Image:
     stock = _select(stocks)
     img, draw = _canvas()
     _poster_text(draw, stock['name'], (40,40,1120,250), 300)
+    _panel(draw,(25,320,1150,680))
     _poster_text(draw, f"{stock['price']:,.2f}", (40,350,1120,500), 650)
     _poster_text(draw, stock['currency'], (40,880,1120,90), 100, False)
-    up = stock['change_pct'] >= 0
-    arrow = [(450,1100),(450,1200),(350,1200),(600,1430),(850,1200),(750,1200),(750,1100)]
-    if up:
-        arrow = [(x,2530-y) for x,y in arrow]
-    draw.polygon(arrow, fill=0)
-    _poster_text(draw, f"{stock['change_pct']:+.2f}%", (40,1460,1120,110), 150)
+    _metric_panel(draw,'Daily change',f"{stock['change_pct']:+.2f}%",(25,1040,1150,300))
+    _poster_text(draw,f"{stock['change']:+,.2f} {stock['currency']}",(75,1410,1050,110),110,False)
     return img

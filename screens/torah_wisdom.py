@@ -79,6 +79,7 @@ def render_torah_wisdom() -> Image.Image:
     _require(verse)
     img, draw = _canvas()
     _poster_text(draw, verse.get('he',''), (50,40,WIDTH-100,740), 270)
+    draw.line((440,810,760,810),fill=0,width=3)
     _poster_text(draw, verse.get('en',''), (50,840,WIDTH-100,590), 210, False)
     _poster_text(draw, verse.get('ref',''), (50,1490,WIDTH-100,70), 80, False)
     return img

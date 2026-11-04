@@ -27,7 +27,8 @@ def render_air_quality() -> Image.Image:
     img, draw = _canvas()
     # A six-segment gauge makes the index's position visible without a table.
     _poster_text(draw, str(round(value)), (40,40,1120,800), 1100)
-    _poster_text(draw, quality + " air", (40,900,1120,260), 250)
+    _panel(draw,(25,875,1150,305))
+    _poster_text(draw, quality + " air", (70,925,1060,200), 200)
     selected = min(5,max(0,math.ceil(value/20)-1))
     for i in range(6):
         x = 50+i*185

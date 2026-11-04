@@ -20,5 +20,6 @@ def render_year_progress() -> Image.Image:
     for i in range(total_days):
         x, y = 42 + (i % 23)*49, 470 + (i//23)*58
         draw.ellipse((x,y,x+37,y+37), fill=0 if i < day_of_year else 255, outline=0, width=3)
+    _panel(draw,(25,1430,1150,145))
     _poster_text(draw, f"{total_days-day_of_year} days left · {now.year}", (40,1460,1120,100), 110)
     return img

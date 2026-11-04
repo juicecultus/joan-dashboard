@@ -66,3 +66,20 @@ second pattern or gamma shift. See [Visionect session options](https://docs.visi
 Audit previews now use the same final-pixel processing as the device. Photos can
 still have white margins when preserving their full aspect ratio; artwork and
 cartoon captions are not cropped away to fill portrait space.
+
+## Weather detail and photo selection
+
+The main weather screen groups current conditions, the daily temperature range,
+and four outlined readings: humidity, wind in mph, today's rain probability,
+and feels-like temperature. Missing readings are shown as a dash, never zero.
+The range and rain chance are matched to the observation's local calendar date.
+
+Immich selection is restricted to Canon / Canon EOS R5 at the search endpoint
+and validated again locally. Portrait orientation and timeline/privacy filters
+still apply. Other cameras and images without camera metadata are excluded.
+
+The visual system uses light outlines, padded text groups and separate value,
+label and attribution sizes. The temperature range uses a five-pixel track and
+a small marker. Trains show up to five live services for the configured route,
+with time, destination, expected/cancelled status and platform. Row spacing
+adapts to the number returned; no departures are invented to fill empty slots.

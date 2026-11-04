@@ -18,6 +18,14 @@ def _portrait_image(content):
     return photo
 
 
+def _is_r5_photo(asset):
+    """Only the Canon EOS R5, checked locally as well as in the API query."""
+    exif = asset.get('exifInfo') or {}
+    make = str(exif.get('make') or '').strip().casefold()
+    model = ' '.join(str(exif.get('model') or '').casefold().split())
+    return make == 'canon' and model in ('canon eos r5','eos r5')
+
+
 def _immich_photo():
     global _last_asset
     _require(IMMICH_API_KEY, 'Immich API key not configured')
@@ -25,7 +33,7 @@ def _immich_photo():
     headers = {'x-api-key': IMMICH_API_KEY}
     # Filter out videos and non-timeline assets on the server and again locally.
     response = requests.post(base + '/search/random', headers=headers,
-        json={'size': 100, 'type': 'IMAGE', 'visibility': 'timeline', 'isOffline': False, 'withExif': True}, timeout=10)
+        json={'size': 100, 'type': 'IMAGE', 'visibility': 'timeline', 'isOffline': False, 'withExif': True, 'make': 'Canon', 'model': 'Canon EOS R5'}, timeout=10)
     response.raise_for_status()
     assets = response.json()
     if not isinstance(assets, list):
@@ -34,7 +42,7 @@ def _immich_photo():
     for asset in assets:
         if asset.get('type') != 'IMAGE' or asset.get('isTrashed') or asset.get('isArchived') or asset.get('isOffline'):
             continue
-        if asset.get('visibility') != 'timeline':
+        if asset.get('visibility') != 'timeline' or not _is_r5_photo(asset):
             continue
         exif = asset.get('exifInfo') or {}
         w = asset.get('width') or exif.get('exifImageWidth')
@@ -58,7 +66,7 @@ def _immich_photo():
                 return _picture(photo)
         except (requests.RequestException, OSError, ValueError):
             continue
-    raise ScreenUnavailable('No readable portrait photos returned by Immich')
+    raise ScreenUnavailable('No readable Canon EOS R5 portrait photos returned by Immich')
 
 
 def render_family_photo():
