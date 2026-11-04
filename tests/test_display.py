@@ -19,6 +19,21 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(native.size,(1600,1200))
         self.assertIsNone(ImageChops.difference(img,native.rotate(-90,expand=True)).getbbox())
 
+    def test_vss_boot_failure_keeps_native_orientation_and_recovers(self):
+        import joan_dashboard as dashboard
+        from unittest.mock import Mock
+        session = Mock()
+        session.get.side_effect = ConnectionError('VSS still starting')
+        with patch.object(dashboard,'get_session',return_value=session), patch.object(dashboard,'_DEVICE_UUIDS_RAW','test-device'):
+            fallback = dashboard.discover_devices()
+        self.assertEqual((fallback[0]['width'],fallback[0]['height']),(1600,1200))
+        native = [{'uuid':'test-device','name':'Joan','width':1600,'height':1200}]
+        with patch.object(dashboard,'_discovered_devices',None), patch.object(dashboard,'_devices_checked_at',0), patch.object(dashboard.time,'monotonic',side_effect=[10,20,71]), patch.object(dashboard,'discover_devices',side_effect=[fallback,native]) as discover:
+            self.assertEqual(dashboard._get_devices(),fallback)
+            self.assertEqual(dashboard._get_devices(),fallback)
+            self.assertEqual(dashboard._get_devices(),native)
+            self.assertEqual(discover.call_count,2)
+
     def test_resize_does_not_stretch(self):
         img=Image.new('L',(1200,1600),0)
         out=_prepare_device_image(img,(1024,758))

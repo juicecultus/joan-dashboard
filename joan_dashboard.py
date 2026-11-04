@@ -615,13 +615,14 @@ def discover_devices() -> list:
 
     If DEVICE_UUIDS is set, only those UUIDs are included.
     If no UUIDs are configured, all allowed devices are included.
-    Falls back to configured UUIDs at canvas resolution on failure.
+    Falls back to configured UUIDs at the Joan 13 native resolution on failure.
     """
     devices = []
     try:
         base_url = f"http://{VSS_HOST}:{VSS_PORT}"
         s = get_session(base_url)
         r = s.get(f"{base_url}/api/device/", timeout=5)
+        r.raise_for_status()
         if r.status_code == 200:
             configured = [u.strip() for u in _DEVICE_UUIDS_RAW.split(",") if u.strip()]
             for d in r.json():
@@ -631,26 +632,30 @@ def discover_devices() -> list:
                 if configured and uuid not in configured:
                     continue
                 displays = d.get("Displays", [])
-                w = displays[0]["Width"] if displays else WIDTH
-                h = displays[0]["Height"] if displays else HEIGHT
+                w = displays[0]["Width"] if displays else 1600
+                h = displays[0]["Height"] if displays else 1200
                 name = d.get("Options", {}).get("Revision", uuid[:12])
                 devices.append({"uuid": uuid, "name": name, "width": w, "height": h})
     except Exception as e:
         print(f"[discover] VSS query failed: {e}")
-        # Fallback: use configured UUIDs at canvas resolution
+        # The portrait canvas is not the native framebuffer. During VSS boot,
+        # preserve the clockwise-mounted Joan 13 orientation.
         for u in [u.strip() for u in _DEVICE_UUIDS_RAW.split(",") if u.strip()]:
-            devices.append({"uuid": u, "name": u[:12], "width": WIDTH, "height": HEIGHT})
+            devices.append({"uuid": u, "name": u[:12], "width": 1600, "height": 1200})
     return devices
 
 
 _discovered_devices = None
+_devices_checked_at = 0.0
 
 
 def _get_devices() -> list:
-    """Return cached list of target devices (discovered on first call)."""
-    global _discovered_devices
-    if _discovered_devices is None:
+    """Recheck device geometry after startup; VSS may boot later than us."""
+    global _discovered_devices, _devices_checked_at
+    now = time.monotonic()
+    if _discovered_devices is None or now - _devices_checked_at >= 60:
         _discovered_devices = discover_devices()
+        _devices_checked_at = now
     return _discovered_devices
 
 
