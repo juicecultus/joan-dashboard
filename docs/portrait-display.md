@@ -80,6 +80,14 @@ still apply. Other cameras and images without camera metadata are excluded.
 
 The visual system uses light outlines, padded text groups and separate value,
 label and attribution sizes. The temperature range uses a five-pixel track and
-a small marker. Trains show up to five live services for the configured route,
-with time, destination, expected/cancelled status and platform. Row spacing
-adapts to the number returned; no departures are invented to fill empty slots.
+a small marker. Trains use two stacked cards with up to three departures and
+three arrivals for the configured route. A shared reported platform appears
+once above the cards; differing platforms appear beside service status.
+Arrivals use the destination station's live calling-point times from trains
+leaving the configured opposite terminus, including services already en route.
+Origin platforms are never reused as arrival platforms. Unavailable feeds are
+identified independently; no services are invented to fill empty slots.
+
+Countdowns use a large hinged flip-calendar number, a supporting Today/Tomorrow
+label, and a separate outlined event card with its full date. Clock layouts are
+unchanged.

@@ -188,12 +188,35 @@ class DisplayTests(unittest.TestCase):
         with patch.object(trains,'_cache_fetch',return_value={'trainServices':{'service':services}}), patch.object(trains,'TRAINS_DESTINATION','MYB'), patch.object(trains,'_poster_text',wraps=shared._poster_text) as text:
             self.assertEqual(trains.render_trains().size,(1200,1600))
         labels=[call.args[1] for call in text.call_args_list]
-        for time in ['10:10','11:10','12:10','13:10','14:10']:
+        for time in ['10:10','11:10','12:10']:
             self.assertIn(time,labels)
         self.assertNotIn('15:10',labels)
         self.assertIn('Cancelled',labels)
-        self.assertIn('Expected 12:25',labels)
-        self.assertIn('—',labels)
+        self.assertTrue(any(label.startswith('Expected 12:25') for label in labels))
+        self.assertIn('Arrivals',labels)
+        self.assertNotIn('Departs',labels)
+        self.assertNotIn('Plat.',labels)
+
+    def test_arrivals_use_target_calling_time_and_never_origin_platform(self):
+        import screens.trains as trains
+        board={'crs':'MYB','locationName':'London Marylebone','trainServices':{'service':[
+            {'std':'08:57','platform':'9','serviceID':'live','subsequentCallingPoints':[
+                {'callingPoint':[{'crs':'AVP','st':'10:03','et':'10:08'}]}]},
+            {'serviceID':'arrived','subsequentCallingPoints':[
+                {'callingPoint':[{'crs':'AVP','st':'09:03','at':'09:04'}]}]}]}}
+        with patch.object(trains,'TRAINS_STATION','AVP'),patch.object(trains,'_minutes_until',return_value=10):
+            rows=trains._incoming_services(board)
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['sta'],'10:03')
+        self.assertEqual(rows[0]['eta'],'10:08')
+        self.assertIsNone(rows[0]['platform'])
+        self.assertEqual(rows[0]['origin']['location']['crs'],'MYB')
+        with patch.object(trains,'_cache_fetch',side_effect=[{'trainServices':{'service':[]}}, {'services':rows}]), patch.object(trains,'_poster_text',wraps=shared._poster_text) as text:
+            self.assertEqual(trains.render_trains().size,(1200,1600))
+        labels=[call.args[1] for call in text.call_args_list]
+        self.assertIn('10:03',labels)
+        self.assertIn('Expected 10:08',labels)
+        self.assertNotIn('08:57',labels)
 
     def test_soap_locations_and_cancellation(self):
         self.assertEqual(_locations({'location':{'crs':'MYB'}}),[{'crs':'MYB'}])

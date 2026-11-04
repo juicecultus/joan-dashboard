@@ -35,9 +35,15 @@ def render_countdown() -> Image.Image:
     upcoming.sort(key=lambda x: x[0])
 
     days, title, event_date = upcoming[0]
+    from .flip_date import _draw_flip_panel
     img, draw = _canvas()
-    _poster_text(draw, "Today" if days == 0 else "Tomorrow" if days == 1 else str(days), (40,40,1120,950), 1200)
-    _panel(draw,(25,1020,1150,555))
-    _poster_text(draw, title if days <= 1 else "days to " + title, (75,1070,1050,320), 200)
-    _poster_text(draw, event_date.strftime("%-d %B"), (45,1480,1110,80), 95, False)
+    # A physical flip-calendar idiom gives the countdown a recognisable shape.
+    _draw_flip_panel(img,draw,40,45,1120,790,str(days),720,radius=36)
+    for x in (30,1140):
+        draw.rounded_rectangle((x,400,x+30,480),radius=8,fill=255,outline=0,width=4)
+    _poster_text(draw,'Today' if days==0 else 'Tomorrow' if days==1 else 'days to go',
+                  (70,875,1060,120),130,False)
+    _panel(draw,(25,1040,1150,530))
+    _poster_text(draw,title,(75,1090,1050,300),210)
+    _poster_text(draw,event_date.strftime('%A %-d %B'),(75,1450,1050,80),85,False)
     return img
